@@ -196,16 +196,16 @@ refuses that origin.
   up.
 - If the core dies within the first 30 s, the shell retries once; on the
   second failure it shows a dialog and exits. With no Node on `PATH`, the
-  message is "Bridge precisa do Node.js 22+ no PATH (ou
-  BRIDGE_NODE=&lt;caminho&gt;)".
+  message is "Bridge needs Node.js 22+ on the PATH (or
+  BRIDGE_NODE=&lt;path&gt;)".
 
 ## Building and packaging
 
 Requires **Node.js 22+ on `PATH`** — including on the machine where Bridge
 will be installed: the core runs as a separate Node process (see above), so
 the installer does **not** carry a bundled Node. Without Node, the app opens
-a dialog saying "Bridge precisa do Node.js 22+ no PATH (ou
-BRIDGE_NODE=&lt;caminho&gt;)".
+a dialog saying "Bridge needs Node.js 22+ on the PATH (or
+BRIDGE_NODE=&lt;path&gt;)".
 
 ```
 npm install          # at the root (workspaces)
@@ -596,7 +596,7 @@ untouched.
 When the first hook arrives, the session becomes a **host**:
 
 - the sidebar row and the pane header start showing `claude`, with a real
-  state ring (`running`, `esperando você`, `terminei`) and the detail
+  state ring (`running`, `waiting for you`, `done`) and the detail
   `no shell` when nothing is happening;
 - notifications, the status line, usage accounting, the server-limit badge
   and the scope guard all apply — as in an agent session;
@@ -637,7 +637,7 @@ Bridge.
 | Whose it is | yours (your account's 5 h / weekly windows) | Anthropic's shared infrastructure |
 | Scales with the plan? | yes | **no** |
 | What the terminal says | the quota reached 100 % | `Server is temporarily limiting requests (not your usage limit)`, `API Error: 529`, `overloaded_error` |
-| How Bridge shows it | a **red** badge in the sidebar, with the reset time | an **orange** ring and badge (`⏳ servidor`) on the session row, with the sentence it read in the tooltip |
+| How Bridge shows it | a **red** badge in the sidebar, with the reset time | an **orange** ring and badge (`⏳ server`) on the session row, with the sentence it read in the tooltip |
 | How it clears | waiting for the reset | on its own, in seconds to minutes |
 
 ### What Bridge does about it
@@ -673,7 +673,7 @@ because they are one deliberate click on a single session:
 with a new task.
 
 **It shows the queue.** With someone waiting, the sidebar gets the line
-`2 sessões aguardando slot` and a **Lançar agora** button, which releases the
+`2 sessions waiting for a slot` and a **Launch now** button, which releases the
 next one, ignoring the launcher once.
 
 ### Routes
@@ -698,7 +698,7 @@ keeps working (it only informs; it doesn't hold anything back).
 ## Sidebar groups
 
 The sidebar groups workspaces by git repository; ones with no repository
-fall into the **"Sem repositório"** group, which comes last. Every group
+fall into the **"No repository"** group, which comes last. Every group
 header is a control:
 
 - **clicking the title collapses and expands** the group (the chevron shows
@@ -708,13 +708,13 @@ header is a control:
   warning;
 - the **"⋯"** that appears on hover has "Fixar no topo" / "Desafixar".
   Pinned groups come first, in the order they were pinned; then repository
-  groups by name, and "Sem repositório" last — unless it is itself pinned.
+  groups by name, and "No repository" last — unless it is itself pinned.
 
 Pinned and collapsed are machine preferences, not core state: they live in
 `localStorage`, under the key `bridge.sidebar.groups`
 (`{ pinned: string[], collapsed: string[], collapsedWorkspaces: string[] }`
 — the first two keyed by group id, which is the repository's id or
-`__loose__` for "Sem repositório", and the third by workspace id). A
+`__loose__` for "No repository", and the third by workspace id). A
 missing or corrupted value is read as an empty preference.
 
 ### Workspaces open by default (0.12.2)
@@ -745,9 +745,9 @@ back to being the page's (the list scrolls instead of wrapping around), and
 with focus on a row's "⋯" the arrow keys still belong to the menu.
 
 Every row also carries an `aria-label` that says in text what the color
-says on screen: `"Workspace exemplo, 2 sessões, esperando você"`, `"Sessão
-claude, travada, editando, em foco"`, `"Grupo forja, 3 workspaces, travada,
-recolhido"`. Without it, the colored ring and the blue focus strip simply
+says on screen: `"Workspace exemplo, 2 sessions, waiting for you"`, `"Session
+claude, stuck, editing, focused"`, `"Group forja, 3 workspaces, stuck,
+collapsed"`. Without it, the colored ring and the blue focus strip simply
 didn't exist for someone using a screen reader. Keyboard focus also reveals
 a row's `✕` and `⋯`, which used to appear only on hover.
 
@@ -761,8 +761,8 @@ pane's **"Close pane"** button.
 Works on an empty, exited or live pane. What erases it is the core
 (`DELETE /api/panes/:id`): it ends the pane's session if there is one, and
 when it was the **last pane in the tab**, closes the tab too. The UI only
-asks when there's a live **agent** session to lose ("Fechar este painel
-encerra a sessão claude. Continuar?"); a live shell closes directly, because
+asks when there's a live **agent** session to lose ("Closing this pane
+ends the claude session. Continue?"); a live shell closes directly, because
 reopening a shell costs one `Enter`. After closing, focus goes to the
 neighboring pane (the core answers `GET /api/panes/:id/neighbor?dir=`) or,
 if there isn't one, to the tab's first pane.
@@ -1020,7 +1020,7 @@ would be wrong by a factor, not by a detail.
 
 **Where the day starts.** At **local midnight** — your machine's clock, not
 UTC. A late-night session counts on the day you were actually working.
-`semana` runs Monday through Sunday, local; `mês` is the local calendar
+`week` runs Monday through Sunday, local; `month` is the local calendar
 month.
 
 **The cost is an ESTIMATE, not an invoice.** It comes from a bundled
@@ -1040,10 +1040,10 @@ See `SECURITY.md`.
 **While it's still reading.** The first scan of a large history is a long
 job (on the author's machine, 8,431 transcripts and 12.8 GB). It runs in
 the background, resumes where it left off and reports progress: the panel
-shows "ainda lendo as transcrições (N de M arquivos)" instead of "nenhuma
-transcrição encontrada" — which would be false — and the "Reler
-transcrições" button shows the fraction while it runs and the result
-(`{ arquivos, mensagens, dias }`) once it's done.
+shows "still reading the transcripts (N of M files)" instead of "no
+transcripts found" — which would be false — and the "Rescan transcripts"
+button shows the fraction while it runs and the result
+(`{ files, entries, days }`) once it's done.
 
 The `usage` block of `config.json` configures the monitor:
 
@@ -1136,7 +1136,7 @@ Top to bottom follows the order of the question:
    price, and the footer saying the cost comes from the table, not from an
    invoice.
 
-The header holds the slice (`dia | semana | mês`); "meia-noite local" only
+The header holds the slice (`day | week | month`); "local midnight" only
 shows in the **day** slice, which is where the boundary decides whether
 the small hours count today or yesterday. With no transcript scanned yet,
 the body becomes an empty state with the folder the core is reading and a
@@ -1569,13 +1569,13 @@ How the core knows this:
   pane's conversation; in that case a clean Claude comes up instead.
 
 What you see on screen: the pane comes back labeled **claude** (not
-`shell`), and the terminal opens with a gray line — `retomando a sessão
-anterior do Claude Code · 9f1a2b3c` — before the agent's first draw. The
+`shell`), and the terminal opens with a gray line — `resuming the previous
+Claude Code session · 9f1a2b3c` — before the agent's first draw. The
 eight characters are the start of the conversation's id, the same prefix
 `claude --resume` shows in its own list. If Claude doesn't come up (binary
 missing from PATH, folder that disappeared), the pane falls back to a
-shell with the old hint, and the footer states the reason: "Não deu pra
-retomar o Claude Code: …".
+shell with the old hint, and the footer states the reason: "Couldn't
+resume Claude Code: …".
 
 And `Ctrl+Shift+C` no longer turns into two terminals: the shortcut splits
 the pane when it already has a live session, and before 0.6.0 the pane
@@ -1638,7 +1638,7 @@ and the first `SessionStart` comes back with **another id** — or with a
 `source` that isn't `resume` — Bridge marks the session as
 `resumeOutcome: 'fresh'` and the pane shows a strip:
 
-> A conversa anterior não foi retomada (o Claude abriu uma sessão nova).
+> The previous conversation was not resumed (Claude opened a new session).
 > **[Reopen with context]** **[Dismiss]**
 
 If the payload carries neither the id nor the `source`, there's no verdict
@@ -1661,19 +1661,19 @@ no model is called for this:
 Then it writes it into the terminal, with one Enter at the end:
 
 ```
-Contexto da sessão anterior (resumo automático do Bridge): Último pedido seu: … · Últimas respostas do agente: … — Continue de onde parou.
+Context from the previous session (automatic Bridge summary): Your last request: … · The agent's last replies: … — Pick up where you left off.
 ```
 
 **This is not the context coming back**, and the strip doesn't promise
 that. It's enough for the new agent to know what you were talking about;
 the detailed history stayed in the old transcript.
 
-**Ignorar** dismisses the warning for that session without writing
+**Dismiss** dismisses the warning for that session without writing
 anything. The mark is per session, not per pane: an empty resume in the
 same pane half an hour later warns again.
 
-**Doing it automatically.** In **Settings → Sessions**, the option *"Ao
-falhar o resume, injetar o resumo automaticamente"* (`sessions.autoRecap`)
+**Doing it automatically.** In **Settings → Sessions**, the option *"When
+resume fails, inject the recap automatically"* (`sessions.autoRecap`)
 makes the injection happen with no click. It's born **off**: writing into
 the agent's prompt is the only thing here that touches your terminal on
 its own.
@@ -1782,7 +1782,7 @@ still alive. With no core running (missing file, corrupted, or a dead
 process), any command exits with code `1` and
 
 ```
-Bridge não está aberto (instance.json não encontrado ou core morto)
+Bridge is not open (instance.json missing or core dead)
 ```
 
 — and the CLI never prints the token, nor accepts one as an argument.
@@ -1791,27 +1791,27 @@ Bridge não está aberto (instance.json não encontrado ou core morto)
 `bridge new` with no `--workspace` use the session from the environment's
 `BRIDGE_SESSION` — the same variable Bridge injects into every PTY it
 creates (spec §3). Without `BRIDGE_SESSION` or the flag, `bridge notify`
-exits with `1` and "sem sessão: use --session ou rode de dentro de um
-painel do Bridge".
+exits with `1` and "no session: use --session or run from inside a
+Bridge pane".
 
 ### Commands
 
 ```
-bridge notify "texto" [--session <id>]
-bridge list [--json]                                     # id, workspace, estado, detail, há quanto tempo
-bridge focus <sessionId|workspace>                        # leva a janela até a sessão: workspace, aba, painel
-bridge new [--agent claude] [--cwd <pasta>] [--workspace <id>] [--split v|h]
-bridge task new <repo> <nome> [--base <branch>] [--no-agent]   # <repo> = id conhecido ou pasta
-bridge task merge <workspace> [--no-ff]                   # default ff-only; --no-ff se recusar com not-ff
+bridge notify "text" [--session <id>]
+bridge list [--json]                                     # id, workspace, state, detail, how long ago
+bridge focus <sessionId|workspace>                        # brings the window to the session: workspace, tab, pane
+bridge new [--agent claude] [--cwd <folder>] [--workspace <id>] [--split v|h]
+bridge task new <repo> <name> [--base <branch>] [--no-agent]   # <repo> = known id or folder
+bridge task merge <workspace> [--no-ff]                   # default ff-only; --no-ff if it refuses with not-ff
 bridge task rm <workspace>
-bridge resume [paneId]                                    # retoma a conversa do agente daquele painel
-bridge send <sessionId> "texto"                           # escreve no stdin (a CLI põe o \r)
+bridge resume [paneId]                                    # resumes that pane's agent conversation
+bridge send <sessionId> "text"                            # writes to stdin (the CLI adds the \r)
 bridge status [--json]
-bridge usage [--range dia|semana|mes|ano] [--anchor AAAA-MM-DD] [--json]  # consumo, custo estimado e limites em tabela de texto
-bridge usage --de AAAA-MM-DD --ate AAAA-MM-DD [--json]    # período personalizado (até 366 dias)
-bridge usage --rescan [--json]                            # relê todas as transcrições do zero
-bridge watch [--events notification,session] [--json]     # os eventos do core, um por linha, até Ctrl+C
-bridge --help | --version                                 # stdout, código 0, sem precisar do core
+bridge usage [--range day|week|month|year] [--anchor YYYY-MM-DD] [--json]  # usage, estimated cost and limits in a text table
+bridge usage --from YYYY-MM-DD --to YYYY-MM-DD [--json]   # custom period (up to 366 days)
+bridge usage --rescan [--json]                            # rereads every transcript from scratch
+bridge watch [--events notification,session] [--json]     # the core's events, one per line, until Ctrl+C
+bridge --help | --version                                 # stdout, exit code 0, no core needed
 ```
 
 `bridge` with no argument at all, `bridge help` and `bridge --help` print
@@ -1822,13 +1822,13 @@ closed, which is exactly when someone goes looking for the command list.
 `<workspace>` (in `focus`/`new`/`task merge`/`task rm`) accepts an id
 **or** a name — resolved against `GET /api/state`. A name isn't unique: if
 more than one workspace shares the name, the CLI exits with `1`, listing
-the ids to disambiguate (`nome ambíguo: 2 workspaces chamados 'x' — use o
+the ids to disambiguate (`ambiguous name: 2 workspaces called 'x' — use the
 id: ws_a (C:\...), ws_b (C:\...)`). `--json` works on **every** command: it
-prints the raw body instead of the pt-BR sentence/table.
+prints the raw body instead of the translated sentence/table.
 
 **Resuming the conversation.** `bridge resume [paneId]` brings back, **in
 the pane**, the agent that was running there, with `claude --resume
-<conversa>` — the same path the UI's restoration takes (spec §10), just
+<id>` — the same path the UI's restoration takes (spec §10), just
 requested from the command line. What chooses the agent, the folder and
 the conversation is the pane (`lastAgent` / `lastAgentSessionId`), not the
 command line. With no `paneId`, it's the current session's pane
@@ -1839,10 +1839,10 @@ command line. With no `paneId`, it's the current session's pane
 the pane comes back as a shell — but remembering which conversation was
 running there — and it's from inside that shell that the command gets
 typed; the core ends that shell and starts the agent in its place. A live
-**agent**, though, blocks it: exits with `1` and "este painel já está com
-um agente" (`409 { code: 'pane-busy' }`), and then the way out is passing
-another `paneId`. A pane that never had an agent exits with `1` and "Este
-painel não tem conversa pra retomar" (`422 { code: 'nothing-to-resume' }`).
+**agent**, though, blocks it: exits with `1` and "this pane already has
+an agent" (`409 { code: 'pane-busy' }`), and then the way out is passing
+another `paneId`. A pane that never had an agent exits with `1` and "This
+pane has no conversation to resume" (`422 { code: 'nothing-to-resume' }`).
 
 The shell only goes down **after** everything checked out: the core
 validates the agent (`claude --version`), the folder and the conversation
@@ -1852,7 +1852,7 @@ leaves the terminal you had exactly where it was. `--json` returns the
 created session plus `resumedFrom`, the resumed conversation's id.
 
 One consequence of ending the shell: run FROM INSIDE the pane being
-resumed, `bridge` dies along with the PTY and the "Retomando a conversa…"
+resumed, `bridge` dies along with the PTY and the "Resuming conversation…"
 sentence (or the `--json` output) may not show. The visible result is the
 pane turning into the agent; from another pane
 (`bridge resume <paneId>`), the output comes out normally.
@@ -1860,8 +1860,8 @@ pane turning into the agent; from another pane
 **Usage from the command line.** `bridge usage` prints the same report as
 the panel, as text: totals (input, output, cache split into
 write/write-1h/read, messages and the estimated cost with the table's
-date), the "inclui subagentes: N% dos tokens" line, the table by model,
-the **5 biggest projects** (the rest becomes a `outros (N projetos)` line,
+date), the "includes subagents: N% of the tokens" line, the table by model,
+the **5 biggest projects** (the rest becomes a `others (N projects)` line,
 summed and not hidden) and the limit windows. `--range` accepts the pt-BR
 names (`dia`, `semana`, `mes`, `ano`) and also the API's (`day`, `week`,
 `month`, `year`); without the flag, it's `dia`. `--anchor AAAA-MM-DD`
@@ -1871,19 +1871,19 @@ all of August. `--de AAAA-MM-DD --ate AAAA-MM-DD` (or `--from`/`--to`) is
 a custom period, inclusive, up to 366 days and starting from 01/01/2020;
 it doesn't combine with `--anchor`. In the panel, `Ctrl+Shift+Y` offers the
 same slices, with ‹ › to move between periods and two dates in
-"personalizado".
+"custom".
 
 It talks to the SAME route as the screen (`GET /api/usage`), so there's no
 chance of the terminal's number diverging from the panel's — there's no
 second tally. With `usage.showCost` off, no line writes money. If the scan
-is still running, the first line warns ("varredura em andamento: N de M
-transcrições lidas — os números ainda vão subir"), because a low total
+is still running, the first line warns ("scan running: N of M
+transcripts read — the numbers will still go up"), because a low total
 from an incomplete read looks just like a genuinely low total.
 
 `bridge usage --rescan` zeroes the counts and rereads everything (it's the
 same `POST /api/usage/rescan` as the Settings button) and answers when
-done: `Releitura concluída: 8.431 transcrições, 184.000 mensagens, 96 dias
-com consumo.` It **refuses** `--range`, `--anchor`, `--de` and `--ate`
+done: `Rescan done: 8,431 transcripts, 184,000 messages, 96 days with
+usage.` It **refuses** `--range`, `--anchor`, `--de` and `--ate`
 together — a rescan has no slice, and silently ignoring the flag would
 leave you thinking you'd reread "the month".
 
@@ -1892,7 +1892,7 @@ prints **one line per event** until you press `Ctrl+C`. With no flag it
 prints the time, the `type` and the id the event carries (`12:03:41
 notification.new ntf_ab12`); with `--json` it prints the event's raw body,
 one JSON per line — ready to pipe to `jq`, because the status line
-("# ligado em 127.0.0.1:…") goes to **stderr**.
+("# connected to 127.0.0.1:…") goes to **stderr**.
 
 `--events` takes `type` **prefixes**, comma-separated, the same filter
 Electron's main process uses via `?events=`: `--events notification`
@@ -1906,20 +1906,20 @@ otherwise a client would start with no state at all. The token is
 
 **A session that doesn't exist.** `bridge notify` and `bridge send`
 against a nonexistent (or already-ended) session exit with `1` and
-"sessão não encontrada" — the route answers `404 { code:
-'session-not-found' }`. Before this, the call used to say "avisado"/"enviado"
+"session not found" — the route answers `404 { code:
+'session-not-found' }`. Before this, the call used to say "acknowledged"/"sent"
 without anything having happened. The agents' hooks (`/hooks/*`) stay
 lenient on purpose: an agent can't break just because Bridge already ended
 its session.
 
-**Flags.** `--flag valor` and `--flag=valor` are equivalent; `--flag` alone
+**Flags.** `--flag value` and `--flag=value` are equivalent; `--flag` alone
 is boolean (`--no-agent`, `--no-ff`). A flag a command doesn't recognize
-exits with `1` and "flag desconhecida: --x". `--` ends the flag parser:
+exits with `1` and "unknown flag: --x". `--` ends the flag parser:
 everything after it becomes text, even if it starts with `--` — it's how
 you send `notify`/`send` a text that starts with `--` without it becoming
-a (would-be) flag — `bridge notify -- "--urgente: build quebrou"`. Without
+a (would-be) flag — `bridge notify -- "--urgent: build broke"`. Without
 quotes, `notify`/`send` join the remaining positionals with a space
-(`bridge send <id> echo duas palavras` sends `echo duas palavras`).
+(`bridge send <id> echo two words` sends `echo two words`).
 
 ### In the installed app
 
@@ -1970,9 +1970,9 @@ account" → `Path` → New (which does the right thing on its own). Either
 way, open a NEW terminal afterward. What Windows resolves as `bridge` is
 the **`.cmd`**, not the `.cjs` — that's why the two files sit side by
 side. The `.cmd` honors `BRIDGE_NODE` (the path to `node.exe`) before
-PATH, and with neither one, it says "Bridge precisa do Node.js 22+ no PATH
-(ou BRIDGE_NODE=&lt;caminho&gt;)" instead of cmd.exe's `'node' não é
-reconhecido`.
+PATH, and with neither one, it says "Bridge needs Node.js 22+ on the PATH
+(or BRIDGE_NODE=&lt;path&gt;)" instead of cmd.exe's `'node' is not
+recognized`.
 
 > The NSIS PATH write is only exercised by a real install (`npm run dist`
 > generates the `.exe`, it doesn't run it).
@@ -2010,7 +2010,7 @@ Tools with "Desktop development with C++" and Python 3). The
 `AttachConsole failed` that shows up on stderr on every `kill()` is **not**
 that problem: it's known node-pty noise, with no functional effect.
 
-**"Token inválido" (401) in the UI.** The token is regenerated on every
+**"Invalid token" (401) in the UI.** The token is regenerated on every
 core boot: whatever is in the browser's localStorage is the previous
 instance's. Grab the new one from `%APPDATA%\bridge\instance.json` (the
 `token` field) and paste it again on the opening screen. The file
