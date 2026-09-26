@@ -1,0 +1,39 @@
+node_modules/
+dist/
+*.log
+.bridge-profile/
+
+# Build do empacotamento
+release/
+.stage/
+
+# Artefatos do e2e Playwright — só nascem quando um teste falha
+test-results/
+playwright-report/
+
+# Bundle da CLI — gerado por `npm run build:cli`, igual ao dist/ do core;
+# só o `bridge.cmd` (fonte) fica versionado.
+packages/cli/bin/bridge.cjs
+packages/cli/bin/bridge.cjs.map
+
+# Ledgers internos da execução (rulings, achados por task) e o material de
+# direção visual: ficam fora do repo público. Os documentos que importam pra
+# quem lê o código são `docs/adr/` e o CHANGELOG.
+.superpowers/
+design/
+
+# JS EMITIDO por engano ao lado do `.ts` (`tsc -p .` ou `tsc -b` sem
+# `--noEmit`). Não existe `.js` legítimo dentro de `packages/*/src` nem de
+# `packages/*/test` — tudo ali é `.ts`/`.tsx`, e o que é script de verdade é
+# `.mjs`/`.cjs` (`esbuild.config.mjs`, `bin/bridge.cjs`, `bin/bridge-hook.cjs`),
+# que estes padrões NÃO pegam. O perigo é silencioso: com `x.js` ao lado de
+# `x.ts`, o esbuild e o vitest resolvem `./x.js` pro arquivo TRANSPILADO e
+# passam a compilar/testar uma fotografia velha do código.
+packages/*/src/**/*.js
+packages/*/test/**/*.js
+packages/*/playwright.config.js
+# Cache do `tsc -b`, pelo mesmo motivo.
+packages/*/tsconfig.tsbuildinfo
+
+# Rascunhos e scripts descartáveis
+.tmp*

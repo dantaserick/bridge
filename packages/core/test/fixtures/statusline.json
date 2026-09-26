@@ -1,0 +1,6 @@
+{ "hook_event_name": "Status", "session_id": "abc", "transcript_path": "C:\\nao-existe.jsonl", "cwd": "C:\\projetos\\x",
+  "model": { "id": "claude-fable-5-1", "display_name": "Fable 5.1" },
+  "workspace": { "current_dir": "C:\\projetos\\x", "project_dir": "C:\\projetos\\x" },
+  "cost": { "total_cost_usd": 3.42, "total_duration_ms": 1000, "total_api_duration_ms": 900, "total_lines_added": 10, "total_lines_removed": 2 },
+  "context_window": { "total_input_tokens": 87000, "total_output_tokens": 4000, "context_window_size": 1000000, "used_percentage": 8.7 },
+  "rate_limits": { "five_hour": { "used_percentage": 23, "resets_at": 1900000000 }, "seven_day": { "used_percentage": 68, "resets_at": 1900400000 } } }

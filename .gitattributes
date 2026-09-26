@@ -1,0 +1,21 @@
+# Repo Windows, mas o conteúdo é normalizado em LF no commit — senão o
+# primeiro commit carrega o CRLF do disco e todo diff futuro vira ruído.
+* text=auto eol=lf
+
+# Estes precisam de CRLF de verdade: o cmd.exe não interpreta .cmd/.bat com
+# terminador LF de forma confiável, o PowerShell tem casos parecidos, e o
+# makensis (o .nsh do instalador) lê o script como texto do Windows.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.nsh text eol=crlf
+
+# Binários marcados à mão. O `text=auto` acima decide por heurística de
+# conteúdo, e heurística erra: um PNG cujos primeiros bytes não tenham NUL
+# entraria como texto e a normalização de LF o CORROMPERIA no commit. O
+# `binary` é atalho pra `-text -diff`, então eles também param de sujar o
+# `git diff` com "Binary files differ" em cima de lixo.
+*.png binary
+*.ico binary
+*.woff2 binary
+*.exe binary

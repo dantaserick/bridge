@@ -1,0 +1,23 @@
+{
+  "name": "@bridge/cli",
+  "version": "0.18.2",
+  "private": true,
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "bin": {
+    "bridge": "bin/bridge.cjs"
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "test": "npm run build && vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@bridge/core": "*",
+    "@bridge/shared": "*",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

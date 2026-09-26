@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Este projeto NUNCA emite: quem constrói é o esbuild, e o `tsc` aqui
+    // só confere tipo. Sem isto, um `tsc -p .` (ou um `tsc -b`) sem
+    // `--noEmit` cospe um `.js` ao lado de cada `.ts` — e a partir daí o
+    // esbuild e o vitest resolvem `./x.js` pro transpilado velho, não pro
+    // fonte. A flag do script `typecheck` vira redundância de propósito.
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

@@ -1,0 +1,108 @@
+appId: com.erickdantas.bridge
+productName: Bridge
+directories:
+  output: release
+
+# O `dist/` do esbuild já é o app inteiro: `@bridge/shared` e `ws` entram
+# bundlados (o `esbuild.config.mjs` só deixa `electron` external), então o
+# pacote não tem NENHUMA dependência de produção e o asar não leva
+# `node_modules`. É por isso que `@bridge/shared` — um workspace por symlink,
+# TypeScript sem build — não aparece aqui: ele não existe em runtime.
+files:
+  - dist/**
+  - package.json
+asar: true
+
+# A devDependency `electron` do shell é uma versão EXATA (e não `^44.1.1`) de
+# propósito: num monorepo o pacote é hoisted pra raiz, o electron-builder não
+# acha ele em `packages/shell/node_modules` e, com um range no package.json,
+# não consegue resolver qual binário usar — falha com "version is a range, not
+# a fixed version". Isso vale mesmo com o `electronDist` abaixo.
+#
+# Aponta pro Electron JÁ DESEMPACOTADO que o pacote `electron` do npm instala,
+# em vez de deixar o electron-builder baixar o zip e extrair por conta própria.
+# Dois motivos:
+#   1. o binário já está no disco depois do `npm install` — baixar de novo é
+#      ~120 MB por máquina à toa;
+#   2. nesta máquina a extração do builder falha SEMPRE no último passo, com
+#      `EPERM: operation not permitted, rename 'release\win-unpacked.tmp' ->
+#      'release\win-unpacked'` (`extractArchive`, electronGet.ts:249). A pasta
+#      extraída fica com um handle preso: renomear falha até manualmente e
+#      minutos depois (o Restart Manager não acusa dono), enquanto apagar,
+#      escrever dentro e renomear os filhos dela funciona — e uma pasta de
+#      teste criada do lado, com os mesmos arquivos, renomeia normalmente.
+#      Com `electronDist` o builder faz `copyDir` e nunca chega nesse rename.
+# O caminho é relativo a `packages/shell` e depende do hoisting do npm
+# workspaces; `scripts/stage-core.mjs` confere que ele existe e que a versão
+# bate com a fixada no package.json, e falha com mensagem clara se não.
+electronDist: ../../node_modules/electron/dist
+# Os módulos nativos do core rodam sob o Node do SISTEMA (ruling da Task 5),
+# então os prebuilds do ABI do Node é que valem. Um rebuild pro ABI do Electron
+# aqui quebraria exatamente o que a gente quer que funcione.
+npmRebuild: false
+
+# Tudo que o core precisa vai FORA do asar, em `resources/`:
+#   resources/core/dist/index.mjs   bundle ESM do core (esbuild, sem tsx)
+#   resources/core/bin/*.cjs        shim dos hooks — o core resolve por
+#                                   `../bin/` a partir de `dist/`, igual ao repo
+#   resources/core/node_modules/**  só as deps de runtime (scripts/stage-core.mjs)
+#   resources/core/package.json     o manifesto do STAGE, não o do repo
+#   resources/ui/**                 build do Vite, servido pelo core em `/`
+#   resources/cli/bridge.cjs        bundle CJS da CLI (esbuild, zero deps em
+#   resources/cli/bridge.cmd        runtime) — a pasta que o instalador
+#                                   põe no PATH do usuário (`installer.nsh`)
+#
+# O `package.json` que vai é o de `.stage/core` (gerado do lockfile versionado):
+# ele descreve o que REALMENTE está em `core/node_modules`. O do repo declara
+# `@bridge/shared`, devDependencies (tsx, vitest, typescript…) e um `bin` que
+# não existem no app — um manifesto mentindo sobre a própria pasta.
+extraResources:
+  - from: ../ui/dist
+    to: ui
+  # A CLI é buildada pelo `npm run build` da raiz, antes do `dist`. Sem o
+  # `.map` de propósito: o `//# sourceMappingURL` do bundle apenas não resolve
+  # (não é erro), e o mapa é 2× o tamanho do binário.
+  - from: ../cli/bin
+    to: cli
+    filter:
+      - bridge.cjs
+      - bridge.cmd
+  - from: ../core
+    to: core
+    filter:
+      - dist/**
+      - bin/**
+  - from: ../../.stage/core/package.json
+    to: core/package.json
+  - from: ../../.stage/core/node_modules
+    to: core/node_modules
+
+# Sem auto-update: o Bridge é um app local, não publica release nenhuma. Sem
+# essa linha o electron-builder tenta montar o `latest.yml` do updater, não
+# acha provider (nem `repository` no package.json, nem `.git/config` — o repo
+# ainda não tem commit) e morre no fim do build com
+# `Cannot read properties of null (reading 'provider')`.
+publish: null
+
+win:
+  # `BridgeMark` (arco + base + dois pilares) sobre fundo arredondado
+  # `--bg-elevated` #27272a — gerado por `scripts/make-icon.mjs`, mesmo
+  # desenho do tray e do favicon da UI. Sem isto o electron-builder avisa
+  # "default Electron icon is used" e o instalador/exe saem com o ícone
+  # padrão do Electron.
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  # `perMachine: false` é o que casa com o `installer.nsh`: ele mexe no PATH
+  # do USUÁRIO (`HKCU\Environment`, preservando o tipo `REG_EXPAND_SZ`), não
+  # no do sistema.
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Bridge
+  # Põe a pasta `resources\cli` do app no PATH do usuário na instalação e
+  # tira na desinstalação. NUNCA EXECUTADO (o `dist` só gera o .exe) — ver BACKLOG.
+  include: installer.nsh

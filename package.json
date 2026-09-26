@@ -1,0 +1,27 @@
+{
+  "name": "bridge",
+  "private": true,
+  "version": "0.18.2",
+  "description": "App de desktop para Windows que roda vários agentes de código lado a lado, com integração de hooks do Claude Code, worktree por tarefa e CLI.",
+  "license": "FSL-1.1-MIT",
+  "author": "Erick Dantas",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dantaserick/bridge"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:core": "npm run dev -w @bridge/core",
+    "dev:ui": "npm run dev -w @bridge/ui",
+    "dev:app": "npm run build -w @bridge/shell && set BRIDGE_DEV=1&& electron packages/shell",
+    "build:ui": "npm run build -w @bridge/ui",
+    "build:cli": "npm run build -w @bridge/cli",
+    "build": "npm run build -w @bridge/ui && npm run build -w @bridge/core && npm run build -w @bridge/cli && npm run build -w @bridge/shell",
+    "dist": "npm run build && npm run dist -w @bridge/shell",
+    "e2e": "npm run build:ui && npm run build:cli && npm run build -w @bridge/shell && npx playwright test -c packages/shell/playwright.config.ts"
+  }
+}

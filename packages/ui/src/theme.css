@@ -1,0 +1,2981 @@
+/*
+ * Tokens de `design/tokens.json` (direção A — "sala de controle densa",
+ * `design/DESIGN.md`). A sidebar e o painel de notificações ainda são os da
+ * Fase 1 no arranjo: a Task 7 redesenha os dois em cima destas variáveis.
+ */
+
+/*
+ * Geist e Geist Mono variáveis, servidas do próprio bundle (`public/fonts`).
+ * O app é offline-first: nada de Google Fonts em runtime.
+ */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist-variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Atenção: o `geist-mono-variable.woff2` é um SUBSET de 225 codepoints
+ * (Latin-1 e pouco mais). Ele não tem box-drawing, blocos, braille, setas nem
+ * símbolos — serve pra rótulo, caminho e número da UI, e NÃO serve sozinho
+ * pro terminal. A fonte do terminal está em `src/terminalPrefs.ts`
+ * (`TERMINAL_DEFAULTS`), que põe a `Cascadia Mono` na frente justamente por
+ * isso — lá tem a medida e o porquê.
+ */
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist-mono-variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  --font-sans: 'Geist', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  /* Espelho de `TERMINAL_DEFAULTS.fontFamily` (`src/terminalPrefs.ts`): quem
+     manda no xterm é a prop do `Terminal`; este token existe pra prévia da
+     fonte no diálogo de configurações e pra qualquer amostra de terminal na
+     UI — a ordem aqui é a que faz símbolo e célula terem a mesma largura. */
+  --font-mono-terminal: 'Cascadia Mono', Consolas, 'Geist Mono', ui-monospace, monospace;
+  --size-ui: 12.5px;
+  --size-ui-small: 11px;
+  --size-ui-tiny: 10.5px;
+  /* ADR-012 — os dois degraus de "numero grande" do painel Uso. A escala de
+     UI do app para em 12,5 px, e um dashboard precisa de figura: o percentual
+     do limite (22 px) e o valor dos cartoes de total (18 px). Sao token, e nao
+     numero solto espalhado pelos componentes, pra que um ajuste de densidade
+     mexa em um lugar so. */
+  --size-figure: 22px;
+  --size-figure-sm: 18px;
+
+  --bg: #18181b;
+  --bg-sidebar: #1c1c20;
+  --bg-terminal: #111114;
+  --surface: #232327;
+  --surface-hover: #2e2e33;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --text: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-dim: #71717a;
+  --text-terminal: #d4d4d8;
+  --accent: #5b8def;
+  --accent-text: #0b0b0e;
+  --link: #7aa7ff;
+  --ok: #4cc38a;
+  --warn: #e6b450;
+  --bad: #e5484d;
+
+  --ring-idle: #52525b;
+  --ring-running: #5b8def;
+  --ring-needs-input: #e6b450;
+  --ring-done: #4cc38a;
+  --ring-stuck: #e5484d;
+  /* Dor verificada #1 — o LARANJA do limite do servidor. Ele é vizinho do
+     âmbar de `needs-input` de propósito (os dois são "parou, mas não quebrou")
+     e não do vermelho de `stuck`: nada travou, e o vermelho está reservado pro
+     limite de USO, que é o outro limite e é seu. */
+  --ring-server-limited: #e08c3a;
+  --ring-exited: transparent;
+
+  --tabs-height: 36px;
+  --pane-header-height: 26px;
+  --status-height: 22px;
+  --pane-gap: 6px;
+  --divider: 6px;
+  --radius-pane: 6px;
+  --radius-control: 5px;
+  --radius-dialog: 8px;
+  --radius-badge: 3px;
+  --radius-pill: 10px;
+  --shadow-overlay: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --sidebar-min: 200px;
+  --sidebar-max: 480px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--size-ui);
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+button {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--surface-hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+button.primary:hover {
+  background: var(--link);
+  border-color: var(--link);
+}
+
+kbd + kbd {
+  margin-left: 3px;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ------------------------------------------------------------ anéis */
+
+.ring {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+.ring.strip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.ring.idle {
+  background: var(--ring-idle);
+}
+
+.ring.empty {
+  background: transparent;
+  border: 1px dashed var(--ring-idle);
+  box-shadow: none;
+}
+
+.ring.running {
+  background: var(--ring-running);
+  box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.25);
+}
+
+.ring.needs-input {
+  background: var(--ring-needs-input);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.ring.done {
+  background: var(--ring-done);
+}
+
+.ring.stuck {
+  background: var(--ring-stuck);
+}
+
+.ring.server-limited {
+  background: var(--ring-server-limited);
+  box-shadow: 0 0 0 2px rgba(224, 140, 58, 0.25);
+}
+
+.ring.static {
+  animation: none;
+}
+
+.ring.exited {
+  background: transparent;
+  border: 1.5px solid var(--border-strong);
+  box-shadow: none;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(230, 180, 80, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(230, 180, 80, 0.08);
+  }
+}
+
+/* ------------------------------------------------------------ abas */
+
+.tabs-bar {
+  display: flex;
+  align-items: center;
+  height: var(--tabs-height);
+  flex: 0 0 var(--tabs-height);
+  padding: 0 8px;
+  gap: 2px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  max-width: 240px;
+  padding: 0 4px 0 0;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.tab:hover {
+  background: var(--surface);
+}
+
+.tab.active {
+  background: var(--surface);
+  border-color: var(--surface-hover);
+  color: var(--text);
+}
+
+/* O corpo clicável da aba; o ✕ fica de fora pra não virar "ativar". */
+.tab-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-count {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.tab-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.tab-new:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tab-show-sidebar {
+  margin-right: 2px;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.tabs-spacer {
+  flex: 1;
+}
+
+.tabs-hints {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--size-ui-small);
+  color: var(--text-dim);
+}
+
+@media (max-width: 900px) {
+  .tabs-hints {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ splits */
+
+.panes-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--bg);
+}
+
+.tab-surface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  padding: var(--pane-gap);
+}
+
+.split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-v {
+  flex-direction: row;
+}
+
+.split-h {
+  flex-direction: column;
+}
+
+.split-side {
+  display: flex;
+  flex-basis: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split-divider {
+  flex: 0 0 var(--divider);
+  background: transparent;
+}
+
+.split-divider.vertical {
+  cursor: col-resize;
+}
+
+.split-divider.horizontal {
+  cursor: row-resize;
+}
+
+.split-divider:hover,
+.split-divider.dragging {
+  background: rgba(91, 141, 239, 0.35);
+}
+
+/* ------------------------------------------------------------ painel */
+
+.pane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-radius: var(--radius-pane);
+  overflow: hidden;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  outline: none;
+}
+
+.pane.focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(91, 141, 239, 0.25);
+}
+
+/* O anel âmbar do painel que pede input vence o foco (spec §6). */
+.pane.needs-input {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 2px rgba(230, 180, 80, 0.28);
+}
+
+.pane-exited {
+  opacity: 0.92;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--pane-header-height);
+  flex: 0 0 var(--pane-header-height);
+  padding: 0 10px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--size-ui-small);
+}
+
+.pane-label {
+  font-weight: 500;
+}
+
+.pane-empty .pane-label {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.pane-exited .pane-label {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+.pane-detail {
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-detail.needs-input {
+  color: var(--warn);
+}
+
+.pane-detail.done {
+  color: var(--ok);
+}
+
+.pane-detail.stuck {
+  color: var(--bad);
+}
+
+.pane-spacer {
+  flex: 1;
+}
+
+.pane-cwd {
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.terminal-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  padding: 4px 6px;
+}
+
+.terminal-body .xterm-viewport {
+  overflow-y: auto;
+}
+
+.pane-hint {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--border-strong);
+}
+
+.pane-exit-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border);
+  font-size: var(--size-ui-small);
+  color: var(--text-dim);
+}
+
+/*
+ * Dor verificada #3 — a faixa do resume que voltou vazio. Mesma geometria da
+ * faixa de saída (o painel já tem uma linguagem pra "aviso rente ao terminal"),
+ * com a borda de aviso à esquerda: o que aconteceu não é um erro do app, é uma
+ * perda de contexto que a pessoa precisa ver antes de digitar o próximo turno.
+ */
+.pane-recap-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border);
+  box-shadow: inset 2px 0 0 var(--warn);
+  font-size: var(--size-ui-small);
+  color: var(--text-secondary);
+}
+
+.pane-recap-strip button {
+  font-size: var(--size-ui-tiny);
+  padding: 2px 8px;
+}
+
+/*
+ * A faixa do painel restaurado (13/09/2026). Morava dentro do xterm, em cinza,
+ * e o `ESC[2J` com que o ConPTY abre a sessão a apagava antes de alguém ler.
+ * Fica logo abaixo do cabeçalho, no mesmo tom apagado de antes: é contexto
+ * ("o que estava aqui"), não aviso — por isso sem a borda de `--warn`.
+ */
+.pane-restore-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 12px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--size-ui-tiny);
+  color: var(--text-dim);
+}
+
+.pane-restore-dismiss {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+}
+
+.pane-restore-dismiss:hover {
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------ rodapé */
+
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: var(--status-height);
+  flex: 0 0 var(--status-height);
+  padding: 0 12px;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-dim);
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.status-message {
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------ diálogo */
+
+.dialog-veil {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(24, 24, 27, 0.85);
+  z-index: 20;
+}
+
+.dialog {
+  width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 16px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-dialog);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+.dialog-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.dialog-title .dim {
+  font-size: var(--size-ui-small);
+  font-weight: 400;
+}
+
+.dialog-field label {
+  display: block;
+  font-size: var(--size-ui-small);
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.dialog-row {
+  display: flex;
+  gap: 6px;
+}
+
+.field {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  background: var(--bg-terminal);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  width: 100%;
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.2);
+}
+
+.dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.dialog-check input {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-actions button {
+  height: 32px;
+  padding: 0 12px;
+}
+
+/* -------------------------------------------------------------- sidebar */
+
+.sidebar {
+  position: relative;
+  flex: none;
+  min-width: var(--sidebar-min);
+  max-width: var(--sidebar-max);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.unread-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  font-family: inherit;
+  font-size: var(--size-ui-small);
+  color: var(--warn);
+  background: rgba(230, 180, 80, 0.12);
+  border: 1px solid rgba(230, 180, 80, 0.3);
+  border-radius: var(--radius-pill);
+}
+
+.unread-pill:hover {
+  background: rgba(230, 180, 80, 0.2);
+}
+
+/* No cabeçalho do painel a pílula é rótulo, não botão. */
+.unread-pill.static {
+  font-size: 10px;
+  background: transparent;
+  cursor: default;
+}
+
+/*
+ * O sino do cabeçalho da sidebar: sempre visível, ao lado da engrenagem.
+ * Sem não lidas é um `icon-button` comum; com não lidas fica âmbar (a cor do
+ * anel `needs-input`) e ganha a contagem ao lado do ícone.
+ */
+.bell-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: var(--size-ui-small);
+}
+
+.bell-button:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.bell-button.has-unread {
+  color: var(--warn);
+  background: rgba(230, 180, 80, 0.12);
+  border-color: rgba(230, 180, 80, 0.3);
+  border-radius: var(--radius-pill);
+  padding: 0 7px;
+}
+
+.bell-button.has-unread:hover {
+  background: rgba(230, 180, 80, 0.2);
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 4px;
+}
+
+.icon-button:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.header-menu {
+  position: relative;
+  display: flex;
+}
+
+.header-menu-list {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  z-index: 30;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+}
+
+.header-menu-list button {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.header-menu-list button:hover {
+  background: var(--surface-hover);
+}
+
+.sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.sidebar-empty {
+  padding: 10px 14px;
+  font-size: var(--size-ui-small);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 4px;
+  font-size: var(--size-ui-tiny);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.repo-group + .repo-group .group-header {
+  padding-top: 10px;
+}
+
+/*
+ * NADA de `transform`, `filter`, `perspective`, `backdrop-filter` nem
+ * `will-change` em `.sidebar-body` nem daqui pra baixo (`.workspace`,
+ * `.workspace-head` e filhos): qualquer uma dessas propriedades cria um
+ * containing block novo, e o `.workspace-menu-list` — que é `position: fixed`
+ * com `top`/`left` calculados em coordenadas de VIEWPORT pelo `menuPlacement`
+ * (R8 da Fase 3) — passaria a se posicionar em relação ao ancestral
+ * transformado, aparecendo deslocado ou fora da tela.
+ */
+.workspace {
+  margin: 2px 6px 0;
+  border-radius: var(--radius-pane);
+  /*
+   * A borda nasce TRANSPARENTE (0.12.2). Só o workspace ativo a pinta, mas ela
+   * existe em todas as linhas pra que ativar, recolher e expandir não mexam um
+   * pixel na altura da lista.
+   */
+  border: 1px solid transparent;
+}
+
+/*
+ * 0.12.2 — o realce é do workspace ATIVO, não do expandido. Com todos abertos
+ * por padrão, manter o fundo no `.expanded` pintaria a sidebar inteira e o
+ * "qual deles a área de conteúdo está mostrando" sumiria.
+ */
+.workspace.active {
+  background: var(--surface);
+  border-color: var(--surface-hover);
+}
+
+.workspace-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-pane);
+  cursor: pointer;
+}
+
+/*
+  A parte clicável da linha (anel, nome, branch, badges). O "⋯" fica FORA
+  dela, como irmão, pra não aninhar botão dentro de `role="button"`.
+*/
+.workspace-head-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-head-main:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-control);
+}
+
+.workspace-head:hover {
+  background: var(--surface);
+}
+
+.workspace.expanded .workspace-head {
+  padding: 7px 10px 5px;
+}
+
+.workspace.active .workspace-head:hover {
+  background: transparent;
+}
+
+/*
+ * O chevron da linha: recolhe/expande o workspace sem ativá-lo. Fica sempre à
+ * vista (ao contrário do "⋯", que é de hover) porque ele é a única saída pra
+ * quem tem workspace demais aberto — escondê-lo faria a queixa voltar.
+ */
+.workspace-chevron {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -4px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.workspace-chevron:hover {
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.workspace-chevron:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.workspace-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-branch {
+  flex: none;
+  font-size: var(--size-ui-tiny);
+  white-space: nowrap;
+}
+
+/* `+N ~M` de um worktree (spec §6): mono miúdo, ao lado do branch. */
+.workspace-git {
+  flex: none;
+  display: inline-flex;
+  gap: 4px;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Arquivo alterado no worktree é a informação que muda a decisão: acende. */
+.git-dirty.warn {
+  color: var(--warn);
+}
+
+/*
+ * Dor verificada #2 — o AMBIENTE do workspace (`wsl:Ubuntu`, `gitbash`). Só
+ * aparece quando o dono escolheu um: sem escolha vale o shell da configuração,
+ * e um selo em toda linha só faria ruído. Discreto por padrão, âmbar quando a
+ * detecção não achou `claude` (ou o ambiente sumiu da máquina).
+ */
+.workspace-env {
+  flex: none;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.workspace-env.warn,
+.workspace-git.env-warn {
+  color: var(--warn);
+}
+
+.workspace-menu {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+
+/* O "⋯" segue a regra do "✕" da sessão: só no hover da linha ou no foco. */
+.workspace-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.workspace-head:hover .workspace-menu-button,
+/* Teclado: a linha focada revela o "⋯" (não há hover pra revelá-lo). */
+.workspace-head-main:focus-visible ~ .workspace-menu .workspace-menu-button,
+.workspace-menu-button:focus-visible,
+.workspace-menu-button[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.workspace-menu-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/*
+ * R8 — `fixed`, com `top`/`left` calculados no JS (`menuPlacement`) a partir do
+ * retangulo do "..." . Como `absolute` dentro da linha, o `overflow: auto` da
+ * lista de workspaces cortava o menu: workspace perto do rodape abria um
+ * popover com as ultimas entradas inalcancaveis.
+ */
+.workspace-menu-list {
+  position: fixed;
+  z-index: 30;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+}
+
+.workspace-menu-list button {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.workspace-menu-list button:hover,
+.workspace-menu-list button:focus-visible {
+  background: var(--surface-hover);
+}
+
+/* Worktree cuja pasta sumiu do disco: a linha diz isso no lugar do branch. */
+.workspace-branch.missing {
+  color: var(--warn);
+  font-style: italic;
+}
+
+/*
+ * A nota alinha sob o NOME, não sob a borda. O chevron da 0.12.2 empurrou o
+ * nome 20 px pra direita (16 de largura − 4 de recuo + 8 de vão), e a nota
+ * anda junto — senão ela ficaria pendurada sob o anel.
+ */
+.workspace-note {
+  padding: 0 16px 6px calc(32px + 20px);
+  font-size: var(--size-ui-small);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace.expanded .workspace-note {
+  padding: 0 10px 0 calc(26px + 20px);
+}
+
+.workspace-note.stuck {
+  color: var(--bad);
+}
+
+.workspace-sessions {
+  border-top: 1px solid var(--surface-hover);
+  padding: 4px 0;
+}
+
+/*
+  Contêiner da linha. Sem `cursor: pointer`: quem é clicável são os FILHOS —
+  a `.session-row-main` (revela a sessão) e o `.session-close` (mata) —, e a
+  mão sobre o vão entre eles prometia um clique que não existe.
+*/
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 24px;
+  border-left: 2px solid transparent;
+}
+
+.session-row:hover {
+  background: var(--surface-hover);
+}
+
+/*
+  A parte clicável da linha (anel, rótulo, detalhe). O "✕" fica FORA dela, como
+  irmão, pra não aninhar botão dentro de `role="button"` — é a mesma regra da
+  `.workspace-head-main`.
+*/
+.session-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* `role="button"` num `div` não herda o cursor do `button` global. */
+  cursor: pointer;
+}
+
+/*
+ * A linha da sessão anda pelo teclado (↑/↓ na sidebar), então ela precisa
+ * MOSTRAR onde o foco está — antes só a linha do workspace tinha contorno, e
+ * descer pra dentro do workspace expandido deixava o foco invisível.
+ */
+.session-row-main:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  border-radius: var(--radius-control);
+}
+
+.session-row.focused {
+  background: rgba(91, 141, 239, 0.1);
+  border-left-color: var(--accent);
+}
+
+.session-label {
+  flex: none;
+}
+
+.session-detail {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: var(--size-ui-tiny);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* O "✕" só aparece no hover: o detalhe é o que importa na varredura. */
+.session-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.session-row:hover .session-close,
+/* Chegando pelo teclado não há hover: a linha focada mostra o ✕ do mesmo
+   jeito, senão o Tab seguinte cai num botão invisível. */
+.session-row-main:focus-visible ~ .session-close,
+.session-close:focus-visible {
+  opacity: 1;
+}
+
+.session-close:hover {
+  background: transparent;
+  color: var(--bad);
+}
+
+.sidebar-footer {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-footer button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  z-index: 5;
+  cursor: col-resize;
+}
+
+.sidebar-resizer:hover {
+  background: rgba(91, 141, 239, 0.35);
+}
+
+/* -------------------------------------------------------- notificações */
+
+.notifications-panel {
+  position: fixed;
+  top: 44px;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  height: 640px;
+  max-height: calc(100vh - 88px);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+}
+
+.notifications-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notifications-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.notifications-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-pill {
+  padding: 3px 9px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--size-ui-small);
+}
+
+.filter-pill:hover {
+  background: var(--surface);
+}
+
+.filter-pill.active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--link);
+  font-size: var(--size-ui-small);
+}
+
+.link-button:hover {
+  background: transparent;
+  color: #a7c4ff;
+}
+
+.link-button:disabled {
+  color: var(--text-dim);
+}
+
+.notifications-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.notifications-empty {
+  padding: 14px;
+}
+
+.notification-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--size-ui);
+  text-align: left;
+}
+
+.notification-row:hover {
+  background: var(--surface);
+}
+
+.notification-row .ring {
+  margin-top: 5px;
+}
+
+.notification-row.kind-needs-input:not(.read) {
+  background: rgba(230, 180, 80, 0.06);
+}
+
+.notification-row.kind-needs-input:not(.read):hover {
+  background: rgba(230, 180, 80, 0.12);
+}
+
+.notification-row.read {
+  opacity: 0.6;
+}
+
+.notification-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.notification-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--size-ui-small);
+}
+
+.notification-workspace {
+  font-weight: 500;
+  font-size: var(--size-ui);
+}
+
+.notification-meta .mono {
+  font-size: var(--size-ui-tiny);
+}
+
+/* O tipo da notificação, na cor do anel da linha. */
+.notification-kind {
+  font-weight: 600;
+  font-size: var(--size-ui);
+}
+
+.notification-row.kind-needs-input .notification-kind {
+  color: var(--warn);
+}
+
+.notification-row.kind-done .notification-kind {
+  color: var(--ok);
+}
+
+.notification-row.kind-stuck .notification-kind {
+  color: var(--bad);
+}
+
+/*
+ * O texto é o que diz O QUE aconteceu ("Permissão: Bash: git push…"): ele
+ * quebra em até três linhas em vez de virar reticências — era a reticência
+ * que escondia justamente a parte que explicava o alerta.
+ */
+.notification-text {
+  margin-top: 2px;
+  color: var(--text-dim);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.notification-row.kind-needs-input .notification-text {
+  color: var(--warn);
+}
+
+.notification-row.kind-stuck .notification-text {
+  color: var(--bad);
+}
+
+.notification-row.read .notification-text {
+  color: var(--text-dim);
+}
+
+.notifications-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  font-size: var(--size-ui-small);
+}
+
+.error-line {
+  color: var(--bad);
+  font-size: var(--size-ui-small);
+  padding: 0 0 4px;
+}
+
+/* Linha de apoio dos campos do diálogo: detecção de repo e preview do branch. */
+.detect-line {
+  margin-top: 5px;
+  font-size: var(--size-ui-small);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bad {
+  color: var(--bad);
+}
+
+.empty-state {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 20px;
+  text-align: center;
+}
+
+.token-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.token-form {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-dialog);
+  padding: 24px;
+  width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.token-form input {
+  font-family: inherit;
+  font-size: 12px;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  padding: 8px;
+}
+
+.token-form .hint {
+  color: var(--text-dim);
+  font-size: var(--size-ui-small);
+}
+
+.connection-banner {
+  background: var(--bad);
+  color: #fff;
+  font-size: var(--size-ui-small);
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.connection-banner button {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.connection-banner button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ------------------------------------- fechar painel + dicas clicáveis (T3) */
+
+/* O "✕" do painel segue o da aba: escondido até o hover (ou o foco do
+   teclado), pra não competir com o cwd na varredura. */
+/*
+ * Menu "Dividir" do cabeçalho do painel: a mesma mecânica do "⋯" do workspace
+ * (`PopoverMenu`), com a pele do cabeçalho — aparece no hover e no foco, como
+ * o ✕ ao lado dele.
+ */
+.pane-menu {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+
+.pane-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.pane:hover .pane-menu-button,
+.pane.focused .pane-menu-button,
+.pane-menu-button:focus-visible,
+.pane-menu-button[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.pane-menu-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.pane-menu-list {
+  position: fixed;
+  z-index: 30;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+}
+
+.pane-menu-list button {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+  font-size: var(--size-ui);
+}
+
+.pane-menu-list button:hover,
+.pane-menu-list button:focus-visible {
+  background: var(--surface-hover);
+}
+
+.pane-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-badge);
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.pane:hover .pane-close,
+.pane.focused .pane-close,
+.pane-close:focus-visible {
+  opacity: 1;
+}
+
+.pane-close:hover {
+  background: var(--surface-hover);
+  color: var(--bad);
+}
+
+/* Botões do painel vazio: os secundários do diálogo, em linha sob as dicas. */
+.pane-hint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pane-hint-actions button {
+  height: 28px;
+  padding: 0 10px;
+}
+
+/* Cada dica da barra de abas é o botão da ação que ela anuncia, e o que ele
+   mostra é o NOME dela — a combinação está no `title`. A aparência continua a
+   de texto: sem borda, sem fundo — só o hover do `.tab-new` diz que dá pra
+   clicar. A altura é a do `.tab-new` pra tudo assentar na mesma linha. */
+.tabs-hint {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tabs-hint:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tabs-hint:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/*
+ * Um grupo de dica = os botões e, só quando são mais de um, o verbo — numa
+ * linha só. O `gap` do grupo é menor que o das `.tabs-hints` de propósito:
+ * "← → navega" tem que ler como UMA dica, e não como três coisas soltas ao
+ * lado de "divide".
+ */
+.tabs-hint-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.tabs-hint-label {
+  color: inherit;
+}
+
+/* ------------------------------- cabeçalho de grupo: fixar e recolher */
+
+/*
+ * O `.group-header` (lá em cima, na parte da sidebar) virou controle: o título
+ * é um botão que recolhe/expande o grupo, e o "⋯" que aparece no hover fixa o
+ * grupo no topo. Recolhido, ele ainda carrega o contador de workspaces e o
+ * anel do pior estado do grupo.
+ *
+ * Vale aqui a mesma proibição da lista de workspaces: NADA de `transform`,
+ * `filter`, `perspective`, `backdrop-filter` ou `will-change` no
+ * `.group-header` nem nos filhos — o `.group-menu-list` é `position: fixed`
+ * com `top`/`left` em coordenadas de VIEWPORT (`menuPlacement`), e um
+ * containing block novo o jogaria pra fora do lugar.
+ */
+.group-header-main {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.group-header-main:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.group-header-main:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+.group-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.group-header.pinned .group-name {
+  color: var(--text-secondary);
+}
+
+.group-pin {
+  flex: none;
+  opacity: 0.75;
+}
+
+/* Recolhido: o contador diz quantos workspaces saíram da vista. */
+.group-count {
+  flex: none;
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: var(--size-ui-tiny);
+  line-height: 15px;
+  text-align: center;
+}
+
+/* O "⋯" do grupo: mesma pele e mesma regra de aparição do "⋯" da linha. */
+.group-menu {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+
+.group-menu-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.group-header:hover .group-menu-button,
+/* Mesma regra do "⋯" do workspace: o foco por teclado revela o do grupo. */
+.group-header-main:focus-visible ~ .group-menu .group-menu-button,
+.group-menu-button:focus-visible,
+.group-menu-button[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.group-menu-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.group-menu-list {
+  position: fixed;
+  z-index: 30;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.group-menu-list button {
+  padding: 6px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.group-menu-list button:hover,
+.group-menu-list button:focus-visible {
+  background: var(--surface-hover);
+}
+
+/* ------------------------------------------------ diálogo de configurações */
+
+/*
+ * `Ctrl+,`. Herda `.dialog` (fundo, borda, sombra) e troca só o que precisa
+ * ser diferente: mais largo, mais alto, e um corpo em duas colunas — a lista
+ * de seções à esquerda e o conteúdo à direita. A altura é presa em `vh` pra
+ * que a tabela de atalhos role dentro do diálogo em vez de esticar a janela.
+ */
+.settings-dialog {
+  width: 720px;
+  max-width: calc(100vw - 48px);
+  max-height: min(640px, calc(100vh - 80px));
+}
+
+.settings-body {
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+.settings-nav {
+  flex: none;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
+}
+
+.settings-nav-item {
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+
+.settings-nav-item:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.settings-nav-item.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Número não precisa da largura toda: 8–24 e 5–120 cabem em 5 caracteres. */
+.settings-number {
+  width: 88px;
+  flex: none;
+}
+
+.settings-note {
+  margin: 6px 0 0;
+  font-size: var(--size-ui-small);
+  line-height: 1.45;
+}
+
+/*
+ * Sub-opção de um checkbox (o "começar minimizado" do início automático):
+ * recuada pra se ler como dependente do de cima, e apagada enquanto estiver
+ * desabilitada — que é o estado dela com o principal desligado.
+ */
+.settings-subcheck {
+  margin-left: 22px;
+}
+
+.settings-subcheck:has(input:disabled) {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* A ressalva da varredura (linha ou árvore acima do teto): é a mesma nota, na
+   cor de aviso — o texto já diz que a contagem está menor que a real. */
+.settings-note.warn {
+  color: var(--warn);
+}
+
+.settings-note p {
+  margin: 6px 0 0;
+}
+
+/*
+ * Prévia da fonte escolhida. `font-family`/`font-size` vêm inline (é o valor
+ * que está sendo digitado); aqui fica só a moldura. `white-space: pre` porque
+ * as linhas são régua de box-drawing: quebrar ou colapsar espaço destruiria
+ * justamente o que se está conferindo.
+ */
+.settings-preview {
+  padding: 10px 12px;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  color: var(--text-terminal);
+  line-height: 1;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/*
+ * Faixa de aviso da seção "Atalhos": o `keybindings.json` tem combinação que o
+ * Bridge não lê, ou duas ações na mesma tecla. É AVISO, não erro do diálogo —
+ * fica dentro da seção (a tabela logo abaixo é a evidência), e não na faixa
+ * vermelha do rodapé, que é pro 400 de um PATCH.
+ */
+.settings-warn {
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(230, 180, 80, 0.4);
+  border-radius: var(--radius-control);
+  background: rgba(230, 180, 80, 0.08);
+  color: var(--warn);
+  font-size: var(--size-ui-small);
+  line-height: 1.45;
+}
+
+.settings-warn ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
+/* BU-13: id de modelo é uma palavra só e pode ser longo (ele vem do
+   transcript). Sem isto, um id de 120 caracteres estica o diálogo. */
+.settings-warn ul li {
+  overflow-wrap: anywhere;
+}
+
+.settings-keys {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--size-ui-small);
+}
+
+.settings-keys th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-keys td {
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.settings-keys td.mono {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* A linha que entrou no aviso: a combinação apaga e ganha o ⚠ ao lado. */
+.settings-key-broken td.mono {
+  color: var(--warn);
+  text-decoration: line-through;
+  text-decoration-color: rgba(230, 180, 80, 0.5);
+}
+
+.settings-key-flag {
+  margin-left: 6px;
+  text-decoration: none;
+}
+
+/* Caminho de arquivo na seção "Atalhos": selecionável e quebrável — ele é
+   longo e o usuário costuma querer copiar em vez de digitar. */
+.settings-path {
+  user-select: all;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
+/*
+ * Variante de AVISO do banner (BR-07): mesma caixa do `.connection-banner`,
+ * cor de alerta em vez de erro. É um estado que o dono pode conviver com —
+ * o app funciona, o que muda é quem consegue ler o token.
+ */
+.connection-banner.warn {
+  background: var(--warn);
+  /* `--warn` e amarelo claro: texto branco em cima seria ilegivel. */
+  color: #1a1a1a;
+}
+
+.connection-banner.warn button {
+  background: rgba(0, 0, 0, 0.12);
+  border-color: rgba(0, 0, 0, 0.35);
+  color: #1a1a1a;
+}
+
+.connection-banner.warn button:hover {
+  background: rgba(0, 0, 0, 0.24);
+}
+
+/* O exemplo de tabela de preços da seção "Uso": herda a caixa da prévia da
+   fonte, mas com entrelinha de leitura (a prévia usa `line-height: 1` pra a
+   moldura de box-drawing fechar, e aqui isso grudaria as chaves). */
+.settings-pricing-example {
+  margin: 0;
+  font-size: var(--size-ui-small);
+  line-height: 1.45;
+}
+
+/* ================================================== painel "Uso" (ADR-012) */
+/*
+ * Direção visual aprovada na Task 2a (`design/uso-mock.html`). O painel herda
+ * a pele do `.dialog`/`.settings-dialog` — fundo, borda, raio, sombra — e só
+ * troca a largura: um dashboard com gráfico de 30 dias e duas tabelas não cabe
+ * nos 720 px das configurações. O padding fecha um pouco em relação ao
+ * `.dialog` (16/20/14 contra 18/20/16) porque a altura útil de uma janela de
+ * 900 px é ~788 px e o painel mede ~782.
+ *
+ * O painel é o CONTÊINER de consulta dos cartões de total (`usagepanel`).
+ */
+.usage-panel {
+  width: 960px;
+  max-width: calc(100vw - 48px);
+  max-height: min(788px, calc(100vh - 80px));
+  padding: 16px 20px 14px;
+  container-type: inline-size;
+  container-name: usagepanel;
+}
+
+/* `wrap`: com a navegação de período e o personalizado (dois campos de data)
+   o cabeçalho pode passar da largura do painel estreito — melhor quebrar a
+   linha que espremer o toggle ou cortar o botão de fechar. */
+.usage-header {
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.usage-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Navegação de período (‹ Hoje ›) e o de/até do personalizado, à esquerda do
+   toggle. Mesmas medidas da cápsula (22 px, `--size-ui-small`) pra os dois
+   controles lerem como uma barra só. O peso volta a 400: o `.dialog-title`
+   é 600 e botão/campo herdariam o negrito do título. */
+.usage-period {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+}
+
+.usage-period .icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.usage-period-today {
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-terminal);
+  color: var(--text-secondary);
+  font-size: var(--size-ui-small);
+  font-weight: 400;
+}
+
+.usage-period-today:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* No período de hoje o botão fica no lugar, apagado: sumir faria as setas
+   pularem debaixo do cursor. */
+.usage-period-today:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.usage-date {
+  height: 22px;
+  padding: 0 6px;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--size-ui-small);
+  font-weight: 400;
+}
+
+.usage-date[aria-invalid='true'] {
+  border-color: var(--warn);
+}
+
+.usage-period-invalid {
+  font-size: var(--size-ui-tiny);
+  color: var(--warn);
+}
+
+/* Toggle de intervalo: agrupado numa cápsula pra ler como UM controle de
+   cinco estados, e não como cinco botões soltos. */
+.usage-range {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.usage-range button {
+  height: 22px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--size-ui-small);
+}
+
+.usage-range button:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.usage-range button.active {
+  background: var(--surface-hover);
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ---------------------------------------- medidores de limite (um por janela) */
+
+.usage-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.limit-card {
+  padding: 7px 12px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.limit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.limit-label {
+  font-size: var(--size-ui-small);
+  color: var(--text-secondary);
+  /* BU-13: a chave crua de uma janela desconhecida vem do payload da
+     statusline. Era o único rótulo do módulo de uso sem a proteção de
+     reticências que todo o resto usa — 64 caracteres numa coluna de cartão
+     empurravam o layout inteiro. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Janela que o core não conhece (`seven_day_opus`): o rótulo é a própria chave
+   do payload, em mono e um degrau menor. */
+.limit-label.raw {
+  font-size: var(--size-ui-tiny);
+}
+
+/* O reset vem logo depois do número, sem `margin-left: auto`: os dois são uma
+   frase só ("68%, reseta em 2h15"), não dois cantos do cartão. */
+.limit-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 2px 0 6px;
+}
+
+.limit-pct {
+  font-size: var(--size-figure);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.limit-pct.ok {
+  color: var(--ok);
+}
+
+.limit-pct.warn {
+  color: var(--warn);
+}
+
+/* `--bad` sobre `--surface` dá 4,00:1 — passa em AA só porque este número é
+   grande (22 px, 600). É por isso que na sidebar, em 10,5 px, o percentual é
+   branco e a cor vive só na barra. */
+.limit-pct.bad {
+  color: var(--bad);
+}
+
+.limit-reset {
+  font-size: var(--size-ui-small);
+  color: var(--text-secondary);
+}
+
+/* 8 px declarados: o `border` de 1 px come 2 px em `box-sizing: border-box`, e
+   a barra tem que continuar com 6 px de corpo visível. */
+.limit-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.limit-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px 0 0 4px;
+}
+
+.limit-fill.ok {
+  background: var(--ok);
+}
+
+.limit-fill.warn {
+  background: var(--warn);
+}
+
+.limit-fill.bad {
+  background: var(--bad);
+}
+
+/* Sem limites vivos (conta de API key): um cartão chato no lugar da grade, com
+   a frase colada no rótulo. */
+.limit-card.flat {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 12px;
+}
+
+.limit-flat-label {
+  flex: none;
+  font-size: var(--size-ui-small);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.limit-flat-note {
+  margin: 0;
+  font-size: var(--size-ui-small);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------- cartões de total */
+/*
+ * Corte EXPLÍCITO em vez de `auto-fit`: cinco colunas no painel largo, três
+ * (3 + 2) no estreito. `auto-fit, minmax(150px, 1fr)` deixava UM cartão órfão
+ * a 760 px.
+ */
+.usage-cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+
+@container usagepanel (max-width: 900px) {
+  .usage-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.usage-card {
+  min-width: 0;
+  padding: 7px 11px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.usage-card-label {
+  font-size: var(--size-ui-small);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.usage-card-value {
+  margin-top: 2px;
+  font-size: var(--size-figure-sm);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.usage-card-sub {
+  margin-top: 2px;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* O custo é a resposta que se veio buscar: é o único cartão com a régua do
+   acento, do mesmo jeito que a seção ativa das configurações. */
+.usage-card.cost {
+  border-color: var(--border-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* --------------------------------- seção (cartão do gráfico e das tabelas) */
+/* Cada cartão de tabela é contêiner de consulta: a coluna da barra de
+   participação some quando ele fica estreito demais para o nome do projeto. */
+.usage-section {
+  padding: 8px 12px 7px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  container-type: inline-size;
+  container-name: usagecard;
+}
+
+.usage-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.usage-section-title {
+  font-size: var(--size-ui-tiny);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.usage-section-hint {
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.usage-footnote {
+  margin: 0;
+  font-size: var(--size-ui-small);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------ gráfico de 30 dias (CSS puro, sem lib) */
+/* 6 px de folga no topo: o rótulo do eixo é centrado na linha de grade de
+   y=0, então metade dele fica acima do plot. */
+.usage-chart {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* Cada rótulo do eixo é ancorado NA SUA linha de grade e centrado nela;
+   `space-between` errava ~7 px e deixava o "0" flutuando. */
+.chart-scale {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 120px;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+}
+
+.chart-y {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.chart-y.y3 {
+  top: 0;
+}
+
+.chart-y.y2 {
+  top: 40px;
+}
+
+.chart-y.y1 {
+  top: 80px;
+}
+
+.chart-y.y0 {
+  top: 120px;
+}
+
+.chart-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.chart-plot {
+  position: relative;
+  height: 120px;
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 5px;
+  align-items: end;
+  /* linhas em 0, 40 e 80; a de 120 é a própria borda de baixo */
+  background: linear-gradient(to bottom, var(--border-strong) 1px, transparent 1px) 0 0 / 100% 40px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.chart-col {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  outline: none;
+}
+
+.chart-col:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.chart-bar {
+  position: relative;
+  width: 100%;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+/* Fora do intervalo selecionado a barra é sólida em `--border-strong`:
+   continua sendo o mesmo objeto, mas recua para o fundo sem depender de
+   opacidade. Ela é CONTEXTO — o valor de cada dia sai no tooltip, no `title` e
+   no `aria-label` da coluna. */
+.chart-col.out .chart-bar {
+  background: var(--border-strong);
+}
+
+.chart-col:hover .chart-bar,
+.chart-col:focus-visible .chart-bar {
+  background: var(--link);
+}
+
+/* Dia sem consumo: um traço na linha de base, para "zero" não virar "sem dado". */
+.chart-zero {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  background: var(--text-dim);
+}
+
+/* O tooltip é ancorado no TOPO DA BARRA, não no topo da coluna: assim ele
+   acompanha a altura do dia e, nos dias de pico, não sobe por cima dos cartões
+   de total. Sem JS — `:hover` e `:focus-visible`. */
+.chart-tip {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 6px 9px;
+  white-space: nowrap;
+  text-align: left;
+  background: var(--surface-hover);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+}
+
+/* Nas bordas o tooltip encosta em vez de centralizar, senão vaza do cartão.
+   Quem decide o que é "borda" é o `chartModel` (um décimo da série, no mínimo
+   3 colunas): o `:nth-child` fixo de antes só servia pra 30 colunas. */
+.chart-col.tip-start .chart-tip {
+  left: 0;
+  transform: none;
+}
+
+.chart-col.tip-end .chart-tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* Série densa (um ano): sem vão — 365 vãos de 5 px não cabem no cartão — e
+   sem raio, que numa barra de 2 px vira borrão. A marca do eixo é o dia 1 de
+   cada mês e começa NA coluna dele, em vez de centrar numa coluna de 2 px. */
+.chart-plot.dense,
+.chart-axis.dense {
+  gap: 0;
+}
+
+.chart-plot.dense .chart-bar {
+  border-radius: 0;
+}
+
+.chart-axis.dense .chart-tick {
+  text-align: left;
+}
+
+.chart-col:hover .chart-tip,
+.chart-col:focus-visible .chart-tip {
+  display: block;
+}
+
+.chart-tip-day {
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+}
+
+.chart-tip-cost {
+  font-size: var(--size-ui);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chart-tip-sub {
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+}
+
+.chart-axis {
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.chart-tick {
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* ------------------------- tabelas (a `.settings-keys` dentro de um cartão) */
+/* `align-items: start`: sem isto o cartão "Por modelo", com 4 linhas, esticava
+   115 px para acompanhar o de projeto, com 9. */
+.usage-tables {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--size-ui-small);
+  table-layout: fixed;
+}
+
+.usage-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding: 0 8px 5px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.usage-table td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.usage-table th.num,
+.usage-table td.num {
+  text-align: right;
+  padding-right: 0;
+  white-space: nowrap;
+}
+
+.usage-table td.usage-key {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.usage-table td.noprice-cell {
+  color: var(--warn);
+}
+
+.usage-table tfoot td {
+  border-bottom: none;
+  border-top: 1px solid var(--border-strong);
+  padding-top: 5px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.col-msg {
+  width: 56px;
+}
+
+.col-tok {
+  width: 64px;
+}
+
+.col-cost {
+  width: 80px;
+}
+
+.col-share {
+  width: 100px;
+}
+
+.col-msg-sm {
+  width: 52px;
+}
+
+.col-cost-sm {
+  width: 76px;
+}
+
+/* Barra de participação: comparação por comprimento, sem gastar uma coluna de
+   porcentagem que ninguém soma de cabeça. A linha "outros" não tem barra — ela
+   é um saco de projetos, não um projeto com participação própria. */
+.usage-share {
+  padding-right: 12px;
+}
+
+.usage-share-track {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.usage-share-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.usage-row-others td {
+  color: var(--text-secondary);
+}
+
+.usage-row-noprice td.usage-key {
+  color: var(--warn);
+}
+
+/*
+ * Cartão estreito: a barra sai e a coluna dela vai a ZERO, para o nome do
+ * projeto não cortar. Quem some é o enfeite, não o dado.
+ *
+ * A célula CONTINUA no DOM de propósito: com `display: none` nos `td`, o
+ * `colgroup` de uma tabela `table-layout: fixed` passa a mapear posicionalmente
+ * errado (a largura da barra ia parar na coluna "Msg") e o número colava no
+ * custo.
+ */
+@container usagecard (max-width: 420px) {
+  .col-share {
+    width: 0;
+  }
+
+  .usage-share {
+    padding: 0;
+  }
+
+  .usage-share-track {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ estado vazio */
+/* Classes próprias: o `.empty-state` do app é outra coisa — ele preenche 100%
+   da altura de um painel de terminal, e herdá-lo esticaria o corpo do diálogo. */
+.usage-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 34px 20px;
+  text-align: center;
+}
+
+.usage-empty-title {
+  color: var(--text);
+}
+
+.usage-empty-hint {
+  max-width: 600px;
+  font-size: var(--size-ui-small);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.usage-empty-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/*
+ * A linha de status do rescan (progresso, depois o resultado). Fica ABAIXO do
+ * botao, e nao ao lado: ela troca de comprimento a cada segundo enquanto a
+ * varredura anda, e ao lado empurrava o botao pelos lados da tela.
+ */
+.usage-empty-status {
+  font-size: var(--size-ui-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------- bloco de limites da sidebar (uma vez só, sob o header) */
+/*
+ * Os limites são da CONTA, não do workspace: repetir a mesma barra de 5h em
+ * cada workspace expandido diria três vezes a mesma coisa.
+ */
+.sidebar-limits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 12px 8px 14px;
+  border-bottom: 1px solid var(--border);
+  container-type: inline-size;
+  container-name: limits;
+}
+
+.limit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.limit-row-label {
+  flex: none;
+  width: 20px;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+  /* BU-13: `flex: none; width: 20px` sem `overflow` deixava o texto ESCAPAR
+     da caixa em vez de ser cortado. O `title` da linha carrega a frase
+     inteira. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.limit-row-bar {
+  flex: 1;
+  min-width: 24px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-terminal);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.limit-row-fill {
+  display: block;
+  height: 100%;
+}
+
+.limit-row-fill.ok {
+  background: var(--ok);
+}
+
+.limit-row-fill.warn {
+  background: var(--warn);
+}
+
+.limit-row-fill.bad {
+  background: var(--bad);
+}
+
+/* O percentual da faixa fica em `--text` (16,3:1). A cor do degrau vive SÓ na
+   barra: `--bad` em 10,5 px daria 4,34:1 sobre `--bg-sidebar`, abaixo do AA, e
+   a informação já está na barra, que como elemento gráfico passa com folga. */
+.limit-row-pct {
+  flex: none;
+  width: 28px;
+  text-align: right;
+  font-size: var(--size-ui-tiny);
+  color: var(--text);
+}
+
+.limit-row-reset {
+  flex: none;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Sidebar apertando: primeiro sai a palavra "reseta" e sobra o horário; depois
+   o reset inteiro. A barra e o percentual nunca saem, e o texto completo
+   continua no `title` da linha. */
+@container limits (max-width: 210px) {
+  .reset-word {
+    display: none;
+  }
+}
+
+@container limits (max-width: 150px) {
+  .limit-row-reset {
+    display: none;
+  }
+}
+
+/* ------------------------- linha da sessão, dentro do workspace expandido */
+.session-line {
+  padding: 4px 10px 6px 26px;
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  container-type: inline-size;
+  container-name: sessionline;
+}
+
+/* Apertou, o modelo cai primeiro: contexto e custo são os dois números que
+   mudam a decisão de continuar ou dar `/clear`. */
+@container sessionline (max-width: 200px) {
+  .session-line-model {
+    display: none;
+  }
+}
+
+/* ------------------------------- limite do servidor e fila (dor #1) */
+
+/*
+  O selo da sessão estrangulada pelo SERVIDOR. Fica entre o rótulo e o
+  detalhe — a mesma coluna que a pessoa varre de cima a baixo procurando quem
+  precisa dela — e usa a MESMA cor do anel: as duas marcas dizem a mesma coisa,
+  então não podem discordar na tela.
+
+  `flex: none` + `white-space: nowrap`: quem cede espaço numa sidebar estreita
+  é o detalhe (que já tem `title`), não o selo — o selo é o motivo de a linha
+  estar chamando atenção.
+*/
+.session-badge {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: var(--size-ui-tiny);
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+/*
+  Dor verificada #4 — o selo 🛡 da guarda de escopo. Azul (a cor "do Bridge",
+  a mesma da faixa de foco) e não vermelha de propósito: nada quebrou e ninguém
+  errou — o app segurou uma coisa que ele foi configurado pra segurar. Vermelho
+  aqui leria como falha da sessão, que é justamente o que ela não é.
+*/
+.session-badge.scope-blocked {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.session-badge.server-limited {
+  color: var(--ring-server-limited);
+  border-color: color-mix(in srgb, var(--ring-server-limited) 45%, transparent);
+  background: color-mix(in srgb, var(--ring-server-limited) 12%, transparent);
+}
+
+/*
+  A faixa do limite de USO atingido: vermelha, logo abaixo das barras de cota —
+  é a continuação natural delas (a barra chegou no fim). O selo do servidor é
+  laranja e mora na LINHA DA SESSÃO; a separação de cor e de lugar é o que
+  impede a leitura de "gastei minha cota" quando o problema é do outro lado.
+*/
+.sidebar-alert {
+  padding: 5px 12px 5px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--size-ui-tiny);
+}
+
+/* Lançamento da fila que falhou: âmbar, não vermelho — não há cota estourada,
+   há um painel que não subiu. */
+.sidebar-alert.launch-error {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+
+.sidebar-alert.usage-limit {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+
+/* A fila do escalonador: "2 sessões aguardando slot" + "Lançar agora". */
+.sidebar-queue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--size-ui-tiny);
+  color: var(--text-secondary);
+}
+
+.sidebar-queue-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-queue-action {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--size-ui-tiny);
+  cursor: pointer;
+}
+
+.sidebar-queue-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

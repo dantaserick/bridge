@@ -1,0 +1,30 @@
+{
+  "name": "@bridge/shell",
+  "version": "0.18.2",
+  "private": true,
+  "description": "Bridge — vários agentes de código lado a lado no Windows",
+  "author": "Erick Dantas",
+  "license": "FSL-1.1-MIT",
+  "type": "module",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "npm run build && set BRIDGE_DEV=1&& electron .",
+    "dist": "npm run build && node scripts/stage-core.mjs && electron-builder",
+    "stage:refresh-lock": "node scripts/stage-core.mjs --refresh-lock",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@bridge/shared": "*",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.0",
+    "electron": "44.1.1",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0",
+    "ws": "^8.18.0"
+  }
+}
