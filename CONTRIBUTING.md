@@ -1,211 +1,227 @@
-# Contribuir com o Bridge
+# Contributing to Bridge
 
-Obrigado por olhar. O Bridge é um projeto pessoal de uma pessoa só, então a
-melhor contribuição costuma ser uma **issue com repro** antes de um PR grande:
-é barato pra você e me diz se a mudança cabe no desenho atual.
+Thanks for taking a look. Bridge is a one-person personal project, so the
+best contribution is usually an **issue with a repro** before a big PR:
+it's cheap for you and tells me whether the change fits the current
+design.
 
-A documentação do projeto é em **português do Brasil** — README, ADRs, spec e
-comentários de código. Issues e PRs em inglês são bem-vindos; só peço que o
-texto que vai pro repositório continue em pt-BR, pra não ficar meio a meio.
+The project's docs are in **English** — the full README is also available
+in Portuguese at [README.pt-BR.md](README.pt-BR.md). Issues and PRs are
+welcome in English or Portuguese.
 
-**A interface é a exceção desde a 0.13.0:** ela fala pt-BR *e* inglês, e nenhum
-texto de tela mora mais dentro de um `.tsx` ou de um `.ts` — tudo vem de um
-catálogo de chaves. Ver "Como acrescentar uma string" abaixo.
+**The interface is the exception since 0.13.0:** it speaks both pt-BR
+*and* English, and no screen text lives inside a `.tsx` or `.ts` file
+anymore — it all comes from a catalog of keys. See "How to add a string"
+below.
 
-## O que você precisa
+## What you need
 
-- **Windows 11** x64 — o app é nativo de Windows (PTY via ConPTY, registro,
-  NSIS). Não há build para Linux/macOS e não é um objetivo hoje.
-- **Node.js 22+** no `PATH`.
-- **Git**, com um repositório de verdade pra exercitar as rotas de worktree.
-- Opcional, pra mexer no adaptador: o **Claude Code** (`claude` no `PATH`).
+- **Windows 11** x64 — the app is Windows-native (PTY via ConPTY,
+  registry, NSIS). There's no Linux/macOS build, and it's not a goal
+  today.
+- **Node.js 22+** on `PATH`.
+- **Git**, with a real repository to exercise the worktree routes.
+- Optional, for touching the adapter: **Claude Code** (`claude` on
+  `PATH`).
 
-## Rodar
+## Running it
 
 ```
-npm install                  # na raiz — é um monorepo de workspaces npm
+npm install                  # at the root — it's an npm workspaces monorepo
 
-npm run dev:core             # só o core (Fastify + node-pty + SQLite) em 127.0.0.1:4560
-npm run dev:ui               # Vite em 127.0.0.1:5173, com proxy de /api e /ws pro core
-npm run dev:app              # o app Electron inteiro (builda o shell e sobe o Electron)
+npm run dev:core             # just the core (Fastify + node-pty + SQLite) on 127.0.0.1:4560
+npm run dev:ui               # Vite on 127.0.0.1:5173, proxying /api and /ws to the core
+npm run dev:app              # the whole Electron app (builds the shell and starts Electron)
 ```
 
-`dev:core` + `dev:ui` abre a UI numa aba de browser: é o caminho mais rápido
-pra mexer em core ou UI. O token da instância fica em
-`%APPDATA%\bridge\instance.json` e a tela inicial pede ele.
+`dev:core` + `dev:ui` opens the UI in a browser tab: it's the fastest way
+to work on the core or the UI. The instance token lives in
+`%APPDATA%\bridge\instance.json`, and the start screen asks for it.
 
-Pra não sujar o seu perfil de verdade enquanto testa, aponte o perfil pra uma
-pasta descartável:
+To avoid messing up your real profile while testing, point the profile at
+a disposable folder:
 
 ```powershell
 $env:BRIDGE_PROFILE_DIR = "$env:TEMP\bridge-dev"
 ```
 
-## Testar
+## Testing
 
 ```
-npm test                     # vitest em todos os pacotes
-npm run typecheck            # tsc --noEmit nos cinco pacotes (TypeScript strict, ESM)
-npm run build                # UI (Vite) + core, CLI e shell (esbuild)
-npm run e2e                  # Playwright + Electron de verdade (16 cenários)
-npm run dist                 # build + stage das deps do core + electron-builder (NSIS x64)
+npm test                     # vitest across all packages
+npm run typecheck            # tsc --noEmit across the five packages (TypeScript strict, ESM)
+npm run build                # UI (Vite) + core, CLI, and shell (esbuild)
+npm run e2e                  # Playwright + real Electron (16 scenarios)
+npm run dist                 # build + stage the core's deps + electron-builder (NSIS x64)
 ```
 
-Um pacote de cada vez também funciona: `npm test -w @bridge/core`,
-`npm run typecheck -w @bridge/ui`, e assim por diante.
+One package at a time also works: `npm test -w @bridge/core`,
+`npm run typecheck -w @bridge/ui`, and so on.
 
-O `npm run e2e` sobe **Electron, core e PTY reais** e no fim de cada cenário
-confere que nenhum processo sobrou. **Nenhum script, teste ou agente mata
-processo por NOME** (`Stop-Process -Name`, `taskkill /IM`): só por PID, e só PID
-que ele mesmo criou — matar por nome derruba o Bridge que você tem aberto, que
-tem o mesmo nome de imagem do que está sendo testado. Só **um** cenário levanta um Claude Code de
-verdade (o do `resume`, que precisa de um agente real pra provar que o painel
-volta como agente); os outros que precisam de um usam um `claude.cmd` falso no
-começo do `PATH`, e o caminho do toast é exercitado por
-`POST /api/sessions/:id/notify`, o mesmo `Notifications.push` que o adaptador
-usa. Se você mexer em algo que muda a interface, rode o e2e
-antes de abrir o PR — ele pega regressão de layout e de restauração que o
-vitest não vê.
+`npm run e2e` brings up **real Electron, core, and PTY**, and at the end
+of each scenario checks that no process was left behind. **No script,
+test, or agent kills a process by NAME** (`Stop-Process -Name`,
+`taskkill /IM`): only by PID, and only a PID it created itself — killing
+by name would take down the Bridge you have open, which shares the image
+name of the one being tested. Only **one** scenario spins up a real Claude
+Code (the `resume` one, which needs a real agent to prove the panel comes
+back as an agent); the others that need one use a fake `claude.cmd` at
+the front of the `PATH`, and the toast path is exercised through
+`POST /api/sessions/:id/notify`, the same `Notifications.push` the adapter
+uses. If you touch anything that changes the interface, run e2e before
+opening the PR — it catches layout and restoration regressions vitest
+doesn't see.
 
-`npm run dist` precisa que o par
-`packages/shell/stage/core.package.json` + `core.package-lock.json` descreva as
-dependências de runtime do core. Depois de mudar as `dependencies` do
-`packages/core`, regrave o par:
+`npm run dist` needs the pair
+`packages/shell/stage/core.package.json` + `core.package-lock.json` to
+describe the core's runtime dependencies. After changing
+`packages/core`'s `dependencies`, regenerate the pair:
 
 ```
 npm run stage:refresh-lock -w @bridge/shell
 ```
 
-## Como o código é organizado
+## How the code is organized
 
-| Pacote | O que é |
+| Package | What it is |
 | --- | --- |
-| `packages/core` | O servidor: sessões PTY, hooks, git/worktree, SQLite, API HTTP/WS. Roda no Node do sistema. |
-| `packages/shared` | Tipos, protocolo e o **catálogo de mensagens** (`src/i18n/`). É a única dependência comum entre core e UI — nada de `node:` aqui. |
-| `packages/ui` | React + xterm.js. Só desenha o que o core manda; toda mutação é uma rota. |
-| `packages/shell` | O Electron: janela, bandeja, toast nativo, empacotamento. |
-| `packages/cli` | O comando `bridge`, um bundle CJS sem dependências de runtime. |
+| `packages/core` | The server: PTY sessions, hooks, git/worktree, SQLite, HTTP/WS API. Runs on the system's Node. |
+| `packages/shared` | Types, protocol, and the **message catalog** (`src/i18n/`). It's the only dependency shared between core and UI — no `node:` here. |
+| `packages/ui` | React + xterm.js. Only draws what the core sends; every mutation is a route. |
+| `packages/shell` | The Electron shell: window, tray, native toast, packaging. |
+| `packages/cli` | The `bridge` command, a CJS bundle with no runtime dependencies. |
 
-Decisões de arquitetura estão em `docs/adr/` — leia o ADR relevante antes de
-propor mudar o que ele decidiu; se a decisão estiver errada hoje, o caminho é
-um ADR novo que a substitua, não uma mudança calada.
+Architecture decisions live in `docs/adr/` — read the relevant ADR before
+proposing to change what it decided; if the decision is wrong today, the
+way forward is a new ADR that supersedes it, not a silent change.
 
-Os ledgers de execução (`.superpowers/sdd/`) e o material de direção visual
-(`design/`) ficam fora do repositório público, por `.gitignore`. O que vale de
-lá foi promovido pros ADRs e pro `CHANGELOG.md`.
+The execution ledgers (`.superpowers/sdd/`) and the visual direction
+material (`design/`) stay out of the public repository, via
+`.gitignore`. What was worth keeping from them was promoted into the ADRs
+and `CHANGELOG.md`.
 
-## Como acrescentar uma string (0.13.0)
+## How to add a string (0.13.0)
 
-Nenhum texto de tela mora num `.tsx`/`.ts`. Todos saem do catálogo em
-`packages/shared/src/i18n/`, e a regra é curta:
+No screen text lives in a `.tsx`/`.ts` file. It all comes from the
+catalog in `packages/shared/src/i18n/`, and the rule is short:
 
-1. **Escreva a chave nos DOIS arquivos** — `pt-BR.ts` (que é a fonte das
-   chaves) e `en.ts`. Faltando no `en.ts`, ou sobrando lá, o
-   `satisfies Record<MessageKey, string>` quebra o **typecheck** — não é um
-   teste que avisa, é o compilador.
-2. **O nome da chave é a SUPERFÍCIE, não o texto.** `sidebar.rodape.novaTarefa`,
-   `uso.painel.total`, `dialog.tarefa.branchPreview` — assim reescrever a copy
-   não obriga a renomear nada. Chave que descreve o texto (`novaTarefaAzul`)
-   envelhece na primeira revisão de redação.
-3. **Use** `t(lang, 'chave', { param })` no core/CLI/shared, `tUi(lang, …)` nos
-   modelos da UI e `const { t } = useT()` nos componentes. Interpolação é
-   `{nome}`; não há dependência de i18n nenhuma, e não vai ter.
-4. **Plural é chave explícita**, não regra: `sessoes.uma` / `sessoes.varias`.
-   As duas línguas que o Bridge fala têm a mesma forma de plural, e uma
-   biblioteca de regras plurais custaria mais do que a linha do `if`.
-5. **Passe `sanitizeDisplay` ANTES** em tudo que vem de PTY, de payload de hook
-   ou de transcript — o catálogo interpola, ele não sanitiza. Um caminho de
-   arquivo com `\r` dentro de um `{param}` desenha a linha errada na sidebar.
-6. **Rode o teste do pacote.** Cada pacote tem uma guarda que varre o `src/`
-   dele e falha listando `arquivo:linha` quando acha literal com acento ou
-   palavra pt-BR comum fora do catálogo. Se a sua linha for uma exceção
-   legítima (log em arquivo, invariante de parser), ponha um `// i18n-ignore`
-   com o motivo ao lado.
+1. **Write the key in BOTH files** — `pt-BR.ts` (which is the source of
+   the keys) and `en.ts`. If it's missing from `en.ts`, or extra there,
+   `satisfies Record<MessageKey, string>` breaks the **typecheck** — it's
+   not a test warning you, it's the compiler.
+2. **The key name is the SURFACE, not the text.**
+   `sidebar.rodape.novaTarefa`, `uso.painel.total`,
+   `dialog.tarefa.branchPreview` — that way rewriting the copy never
+   forces a rename. A key that describes the text (`novaTarefaAzul`) ages
+   badly on the first copy revision.
+3. **Use** `t(lang, 'key', { param })` in core/CLI/shared, `tUi(lang, …)`
+   in the UI's models, and `const { t } = useT()` in components.
+   Interpolation is `{name}`; there's no i18n dependency at all, and
+   there won't be.
+4. **Plurals are explicit keys**, not a rule: `sessoes.uma` /
+   `sessoes.varias`. The two languages Bridge speaks have the same plural
+   form, and a plural-rules library would cost more than the `if` line.
+5. **Run `sanitizeDisplay` BEFORE** anything coming from the PTY, from a
+   hook payload, or from a transcript — the catalog interpolates, it
+   doesn't sanitize. A file path with `\r` inside a `{param}` draws the
+   wrong line in the sidebar.
+6. **Run the package's test.** Each package has a guard that sweeps its
+   `src/` and fails, listing `file:line`, when it finds an accented
+   literal or a common pt-BR word outside the catalog. If your line is a
+   legitimate exception (log to a file, parser invariant), add a
+   `// i18n-ignore` with the reason next to it.
 
-**O ponto cego, que ninguém pode ignorar:** a guarda olha ACENTO. Copy sem
-acento — `Todos`, `Base`, `Msg`, `Total`, e principalmente texto solto dentro de
-JSX — passa batido. Depois de mexer num `.tsx`, dê uma passada de olho
-procurando texto que você digitou e não pôs no catálogo; foi assim, e não pelo
-teste, que os últimos foram achados.
+**The blind spot nobody can skip:** the guard looks for ACCENTS. Copy
+without an accent — `Todos`, `Base`, `Msg`, `Total`, and especially loose
+text inside JSX — slips through. After touching a `.tsx`, do a pass
+looking for text you typed and didn't put in the catalog; that's how the
+last few were found, not by the test.
 
-**Um idioma novo** é, antes de tudo, **um arquivo novo** em `src/i18n/` com as
-mesmas chaves — é o trabalho de verdade, e o `satisfies` diz quando ele está
-completo. O resto é acrescentar o código a cinco listas de
-`shared/src/i18n/index.ts` (a união `Language`, `LANGUAGES`,
-`LANGUAGE_SETTINGS`, `CATALOGUES` e `INTL_LOCALE`), uma linha no
-`LANGUAGE_KEYS` de `packages/ui/src/settingsModel.ts` (o mapa de opção → chave
-do nome do idioma; sem ela o seletor não sabe como chamar a opção nova) e a
-regra de `systemLanguage`, se a locale da máquina tiver que cair nele. Os dois
-`z.enum` de `ui.language` (`api/schemas.ts` e `profile.ts`) **não** precisam ser
-mexidos: os dois derivam do `LANGUAGE_SETTINGS`. O seletor da tela também não —
-ele é gerado da mesma lista; só falta a chave `idioma.<código>` com o nome do
-idioma **na própria língua**, em todos os catálogos. Fora
-`CATALOGUES` e a lista de `MessageKey`, o TypeScript aponta cada lugar que
-faltou — nenhuma dessas listas aceita ficar incompleta em silêncio.
+**A new language** is, above all, **a new file** in `src/i18n/` with the
+same keys — that's the real work, and `satisfies` tells you when it's
+complete. The rest is adding the code to five lists in
+`shared/src/i18n/index.ts` (the `Language` union, `LANGUAGES`,
+`LANGUAGE_SETTINGS`, `CATALOGUES`, and `INTL_LOCALE`), one line in the
+`LANGUAGE_KEYS` of `packages/ui/src/settingsModel.ts` (the option → key
+map for the language name; without it the selector doesn't know what to
+call the new option), and the `systemLanguage` rule, if the machine's
+locale should fall into it. The two `z.enum` of `ui.language`
+(`api/schemas.ts` and `profile.ts`) **don't** need touching: both derive
+from `LANGUAGE_SETTINGS`. The screen's selector doesn't either — it's
+generated from the same list; all that's missing is the `idioma.<code>`
+key with the language's name **in its own language**, in every catalog.
+Outside `CATALOGUES` and the `MessageKey` list, TypeScript points to every
+spot that's missing — none of those lists is allowed to stay incomplete
+silently.
 
-## Convenções
+## Conventions
 
-- **TypeScript strict, ESM.** Sem `any` solto, sem `// @ts-ignore` sem
-  explicação do porquê na linha de cima.
-- **Teste junto com a mudança.** O padrão do repositório é vitest por pacote,
-  testando função pura sempre que dá; rota nova ganha teste de rota.
-- **Comentário explica o *porquê*, não o *o quê*.** Boa parte dos comentários
-  daqui registra uma medição ou um erro que custou caro — mantenha esse
-  padrão em vez de descrever o que a linha ao lado já diz.
-- **Texto de interface: pelo catálogo, nunca literal** (ver a seção acima). O
-  pt-BR é a fonte, com tratamento "você"; o inglês é escrito junto, na mesma
-  mudança.
-- **Nada de dependência nova sem necessidade clara.** O projeto é
-  deliberadamente magro; cada dependência a mais é peso no instalador e
-  superfície de manutenção. Se a sua mudança precisa de uma, diga na issue por
-  quê antes de escrever o código.
-- **Nenhum caminho da sua máquina no código.** Nada de caminho absoluto real
-  nem do seu nome de usuário em default, teste ou documentação — use uma
-  variável de ambiente, detecção, ou um placeholder genérico
-  (`C:\projetos\meu-repo`, que é o que os fixtures usam).
-- **Fim de linha é LF, e quem manda é o `.gitattributes`.** A raiz tem
-  `* text=auto eol=lf`, com `.cmd`/`.bat`/`.ps1`/`.nsh` presos em `eol=crlf`
-  (o `cmd.exe` não lê `.cmd` com LF de forma confiável) e os binários
-  (`.png`, `.ico`, `.woff2`, `.exe`) marcados à mão, pra a heurística de
-  conteúdo não decidir por eles e corromper um arquivo na normalização.
-  Você não precisa configurar `core.autocrlf`: clone, edite e comite — se um
-  diff seu vier com o arquivo INTEIRO mudado, é fim de linha, e o conserto é
-  `git add --renormalize .`, não reescrever o arquivo.
+- **TypeScript strict, ESM.** No loose `any`, no `// @ts-ignore` without
+  an explanation of why on the line above.
+- **Test alongside the change.** The repository's standard is vitest per
+  package, testing a pure function whenever possible; a new route gets a
+  route test.
+- **A comment explains the *why*, not the *what*.** Much of the
+  commentary here records a measurement or a mistake that was costly —
+  keep that standard instead of describing what the line next to it
+  already says.
+- **Interface text: through the catalog, never a literal** (see the
+  section above). pt-BR is the source, with "você" address; English is
+  written alongside it, in the same change.
+- **No new dependency without a clear need.** The project is
+  deliberately lean; every extra dependency is weight on the installer
+  and maintenance surface. If your change needs one, say why in the issue
+  before writing the code.
+- **No path from your machine in the code.** No real absolute path or
+  your own username in a default, test, or doc — use an environment
+  variable, detection, or a generic placeholder (`C:\projects\my-repo`,
+  which is what the fixtures use).
+- **Line ending is LF, and `.gitattributes` calls the shots.** The root
+  has `* text=auto eol=lf`, with `.cmd`/`.bat`/`.ps1`/`.nsh` pinned to
+  `eol=crlf` (cmd.exe doesn't reliably read a `.cmd` with LF) and binaries
+  (`.png`, `.ico`, `.woff2`, `.exe`) marked by hand, so the content
+  heuristic doesn't decide for them and corrupt a file on normalization.
+  You don't need to configure `core.autocrlf`: clone, edit, and commit —
+  if one of your diffs shows the WHOLE file changed, it's a line ending,
+  and the fix is `git add --renormalize .`, not rewriting the file.
 
-## Fluxo de PR
+## PR flow
 
-1. Abra (ou comente em) uma issue descrevendo o problema e como reproduzir.
-2. Faça um fork e crie um branch a partir do `main`, com nome descritivo
-   (`fix/statusline-vazia`, `feat/atalho-fechar-aba`).
-3. Faça commits pequenos, com mensagem no imperativo e em uma linha
-   (`corrige a leitura do login item com --hidden`). O corpo, quando existir,
-   explica o porquê.
-4. Antes de abrir o PR: `npm test`, `npm run typecheck` e `npm run build`
-   verdes. Rode `npm run e2e` se você tocou na UI ou no shell.
-5. Na descrição do PR, diga o que muda pra quem usa o app, como você verificou
-   e o que você **não** verificou. Um "não testei o instalador" honesto vale
-   mais que um checklist otimista.
+1. Open (or comment on) an issue describing the problem and how to
+   reproduce it.
+2. Fork and create a branch off `main`, with a descriptive name
+   (`fix/empty-statusline`, `feat/close-tab-shortcut`).
+3. Make small commits, with an imperative, one-line message (`fix login
+   item reading with --hidden`). The body, when there is one, explains
+   why.
+4. Before opening the PR: `npm test`, `npm run typecheck`, and
+   `npm run build` green. Run `npm run e2e` if you touched the UI or the
+   shell.
+5. In the PR description, say what changes for whoever uses the app, how
+   you verified it, and what you **didn't** verify. An honest "I didn't
+   test the installer" is worth more than an optimistic checklist.
 
-Mudanças que alteram a interface merecem um screenshot no PR — antes e depois.
+Changes that alter the interface deserve a screenshot in the PR — before
+and after.
 
-## Reportar um bug
+## Reporting a bug
 
-Inclua: versão do Bridge (canto do diálogo de configurações ou o nome do
-instalador), versão do Windows, versão do Node (`node -v`), o que você fez,
-o que aconteceu e o que você esperava. Se o app deu erro de subida, o log do
-core está em `%APPDATA%\bridge\logs\core.log` e o do shell em
-`%APPDATA%\bridge\logs\shell.log` — cole o trecho relevante, não o arquivo
-inteiro.
+Include: Bridge version (corner of the settings dialog, or the
+installer's name), Windows version, Node version (`node -v`), what you
+did, what happened, and what you expected. If the app failed to start,
+the core log is at `%APPDATA%\bridge\logs\core.log` and the shell log at
+`%APPDATA%\bridge\logs\shell.log` — paste the relevant snippet, not the
+whole file.
 
-## Segurança
+## Security
 
-O core escuta só em `127.0.0.1`, com um token por instância gravado em
-`%APPDATA%\bridge\instance.json`. Se você encontrar algo que fure esse limite
-(execução remota, vazamento de token, escrita fora do perfil), **não abra uma
-issue pública**: mande uma mensagem privada pelo GitHub descrevendo o problema
-e como reproduzir.
+The core listens only on `127.0.0.1`, with a per-instance token stored in
+`%APPDATA%\bridge\instance.json`. If you find something that breaches
+that boundary (remote execution, token leak, writing outside the
+profile), **don't open a public issue**: send a private message through
+GitHub describing the problem and how to reproduce it.
 
-## Licença das contribuições
+## Contribution license
 
-Ao abrir um pull request você concorda que a sua contribuição entra sob a
-mesma licença do projeto, a [FSL-1.1-MIT](LICENSE).
+By opening a pull request you agree that your contribution is licensed
+under the project's same license, [FSL-1.1-MIT](LICENSE).

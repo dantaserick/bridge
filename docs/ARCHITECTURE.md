@@ -1,21 +1,22 @@
-# Arquitetura do Bridge
+# Bridge architecture
 
-Resumo de como o Bridge é montado, para quem vai mexer no código. As decisões,
-com contexto e consequências, estão em [`adr/`](adr/README.md). Este documento
-é o mapa, não a fonte da verdade.
+Summary of how Bridge is put together, for whoever's going to touch the
+code. Decisions, with context and consequences, live in
+[`adr/`](adr/README.md). This document is the map, not the source of
+truth.
 
-## Três processos e um shim
+## Three processes and a shim
 
 ```
                  ┌───────────────────────────────────────┐
    Electron      │ shell  (packages/shell)                │
-   ──────────    │  janela, bandeja, toast nativo         │
+   ──────────    │  window, tray, native toast            │
                  └────────────────┬──────────────────────┘
-                                  │ spawn (Node do sistema)
+                                  │ spawn (system Node)
                                   ▼
                  ┌───────────────────────────────────────┐
    Node          │ core   (packages/core)                 │
-   ──────────    │  Fastify em 127.0.0.1:<porta>          │
+   ──────────    │  Fastify on 127.0.0.1:<port>           │
                  │  node-pty · SQLite · git/worktree      │
                  └───┬──────────────────┬─────────────────┘
                      │ HTTP /api + /ws  │ HTTP /hooks
@@ -23,59 +24,61 @@ com contexto e consequências, estão em [`adr/`](adr/README.md). Este documento
          ┌───────────────────────┐      │
          │ ui (packages/ui)      │      │   ┌──────────────────────────┐
          │ React + xterm.js      │      └───┤ shim bridge-hook.cjs     │
-         │ servida pelo core     │          │ chamado pelos hooks do   │
-         └───────────────────────┘          │ Claude Code, por sessão  │
+         │ served by the core    │          │ called by Claude Code's  │
+         └───────────────────────┘          │ hooks, per session       │
                                             └──────────────────────────┘
 ```
 
-- **core** (`packages/core`) é o dono de tudo que é estado: sessões PTY,
-  layout, notificações, git. Escuta **só** em `127.0.0.1`, com um token por
-  instância gravado em `%APPDATA%\bridge\instance.json`. Roda sozinho
-  (`npm run dev:core`) — a UI abre numa aba de browser e funciona.
-- **ui** (`packages/ui`) não guarda verdade: ela desenha o snapshot que o core
-  manda por `GET /api/state` e aplica os eventos do WebSocket `/ws`. Toda
-  mutação é uma rota.
-- **shell** (`packages/shell`) é o Electron. Ele **não** embute o core: sobe
-  um processo Node filho (ADR-002), porque `node-pty` e `better-sqlite3`
-  precisariam de rebuild pro ABI do Electron e isso quebraria a suíte do core,
-  que roda no Node do sistema. É por isso que o app **exige Node.js 22+ na
-  máquina**.
-- **shared** (`packages/shared`) é o contrato: tipos do domínio, eventos do WS,
-  defaults de configuração e o mapa de atalhos. Nada de `node:` aqui — o
-  pacote entra no bundle do browser.
-- **cli** (`packages/cli`) é o comando `bridge`, um bundle CJS de arquivo único
-  sem dependências de runtime. Ele fala a mesma API HTTP que a UI.
+- **core** (`packages/core`) owns all the state: PTY sessions, layout,
+  notifications, git. Listens **only** on `127.0.0.1`, with a per-instance
+  token stored in `%APPDATA%\bridge\instance.json`. Runs standalone
+  (`npm run dev:core`) — the UI opens in a browser tab and works.
+- **ui** (`packages/ui`) holds no truth: it draws the snapshot the core
+  sends via `GET /api/state` and applies the `/ws` WebSocket events. Every
+  mutation is a route.
+- **shell** (`packages/shell`) is Electron. It does **not** embed the
+  core: it spawns a child Node process (ADR-002), because `node-pty` and
+  `better-sqlite3` would need a rebuild for Electron's ABI, which would
+  break the core's test suite, which runs on the system's Node. That's
+  why the app **requires Node.js 22+ on the machine**.
+- **shared** (`packages/shared`) is the contract: domain types, WS events,
+  configuration defaults, and the keybinding map. No `node:` here — the
+  package goes into the browser bundle.
+- **cli** (`packages/cli`) is the `bridge` command, a single-file CJS
+  bundle with no runtime dependencies. It speaks the same HTTP API as the
+  UI.
 
-## Como o estado do agente aparece na sidebar
+## How agent state shows up in the sidebar
 
-Nada é lido da tela do terminal. Ao abrir uma sessão de agente, o core escreve
-um `settings.json` **só daquela sessão** e lança o Claude Code com
-`--settings <caminho>`. Nesse arquivo, todos os hooks e a `statusLine` apontam
-pro shim `packages/core/bin/bridge-hook.cjs`, que recebe `<sessionId> <Evento>`,
-lê o payload no stdin e faz um POST em
-`http://127.0.0.1:<porta>/hooks/<sessionId>/<Evento>`. O adaptador traduz o
-evento em estado (ADR-004):
+Nothing is read from the terminal screen. When opening an agent session,
+the core writes a `settings.json` **just for that session** and launches
+Claude Code with `--settings <path>`. In that file, every hook and the
+`statusLine` point at the shim `packages/core/bin/bridge-hook.cjs`, which
+receives `<sessionId> <Event>`, reads the payload on stdin, and POSTs to
+`http://127.0.0.1:<port>/hooks/<sessionId>/<Event>`. The adapter
+translates the event into state (ADR-004):
 
-| Hook | Estado | Observação |
+| Hook | State | Note |
 | --- | --- | --- |
-| `SessionStart` | `idle` | zera contadores |
-| `UserPromptSubmit` | `running` | detail "pensando…" |
-| `PreToolUse` | `running` | detail = tool + resumo do argumento |
-| `PostToolUse` | `running` | limpa o detail da tool |
-| `PermissionRequest` | `needs-input` | + notificação |
-| `Notification` | `needs-input` ou `idle` | depende da mensagem |
-| `Stop` | `done` | + notificação; 5 `Stop` bloqueados seguidos viram `stuck` |
-| `StatusLine` | (mantém) | atualiza a cota da sessão e as janelas do monitor de uso, e devolve a statusline montada pelo Bridge |
-| saída do PTY | `exited` | guarda o `exitCode`; o painel fica aberto pra você ler |
+| `SessionStart` | `idle` | zeroes counters |
+| `UserPromptSubmit` | `running` | detail "thinking…" |
+| `PreToolUse` | `running` | detail = tool + argument summary |
+| `PostToolUse` | `running` | clears the tool detail |
+| `PermissionRequest` | `needs-input` | + notification |
+| `Notification` | `needs-input` or `idle` | depends on the message |
+| `Stop` | `done` | + notification; 5 blocked `Stop`s in a row become `stuck` |
+| `StatusLine` | (unchanged) | refreshes the session's quota and the usage monitor's windows, and returns the statusline Bridge assembled |
+| PTY exit | `exited` | stores the `exitCode`; the panel stays open for you to read |
 
-O shim é Node puro, sem dependências, e sai com código 0 sempre: um core fora
-do ar nunca pode derrubar o agente de quem está trabalhando.
+The shim is plain Node, no dependencies, and always exits with code 0: a
+core that's down should never be able to take down the agent someone's
+working with.
 
-Além dos hooks, qualquer painel pode notificar por sequências OSC 9 / 777 / 99
-lidas do stream do PTY, ou por `bridge notify "texto"` — canais agnósticos de
-agente, que marcam a notificação sem mexer no `state`.
+Besides the hooks, any panel can notify via OSC 9 / 777 / 99 sequences
+read from the PTY stream, or via `bridge notify "text"` — agent-agnostic
+channels that flag the notification without touching `state`.
 
-## Modelo de domínio
+## Domain model
 
 ```
 Repo         { id, path, name, trustFilters, hasFilterDrivers? }
@@ -83,7 +86,7 @@ Workspace    { id, name, cwd, repoId?, branch?,
                worktree?: { base, path, baseGuessed? },
                environment?, crossAccess?, createdAt }
 Tab          { id, workspaceId, title, kind: 'terminal', order }
-Pane         { id, tabId }        # a posição vem da árvore de layout da aba:
+Pane         { id, tabId }        # position comes from the tab's layout tree:
                                   # split{ dir: 'v'|'h', ratio, a, b } | leaf{ paneId }
 Session      { id, paneId, workspaceId, kind, agent?, state, detail?, tool?,
                lastNotification?, quota?, serverLimit?, resumeRequested?,
@@ -93,304 +96,328 @@ Notification { id, sessionId, workspaceId, kind, text, at, readAt? }
 QuotaSnapshot{ model, contextTokens, contextPct, costUsd, rateLimits[], at }
 ```
 
-Os campos de sessão da 0.11.0 (`serverLimit`, `resumeRequested`/`resumeOutcome`,
-`sawOutput`, `scopeBlocks`) e o `hosted` da 0.12.0 só existem em MEMÓRIA: são
-fatos sobre a subida daquele processo, e o processo não sobrevive ao restart.
-`environment` e `crossAccess` são do workspace e vão pro SQLite — são decisões
-do dono.
+The 0.11.0 session fields (`serverLimit`, `resumeRequested`/
+`resumeOutcome`, `sawOutput`, `scopeBlocks`) and the 0.12.0 `hosted` field
+only exist in MEMORY: they're facts about that process's run, and the
+process doesn't survive a restart. `environment` and `crossAccess` belong
+to the workspace and go to SQLite — they're decisions made by the owner.
 
-`hosted` (`{ agent, since }`) marca a sessão de SHELL que está com um Claude
-Code aberto dentro dela. `kind` continua `'shell'` e `agent` continua ausente:
-quem responde "que agente é esse" é o `hosted.agent`, e é a regra
-`hosted?.agent ?? agent` que a UI usa pro rótulo — ver o módulo
-`adapters/hosted.ts` na tabela abaixo.
+`hosted` (`{ agent, since }`) marks a SHELL session that has a Claude Code
+open inside it. `kind` stays `'shell'` and `agent` stays absent: what
+answers "which agent is this" is `hosted.agent`, and it's the
+`hosted?.agent ?? agent` rule the UI uses for the label — see the
+`adapters/hosted.ts` module in the table below.
 
-**Painel ↔ sessão é 1:1** (ADR-005): um painel hospeda no máximo uma sessão
-viva. Pedir uma segunda devolve `409`; se a que está lá já saiu (`exited`), ela
-dá lugar à nova. É a regra que faz "Enter num painel morto reabre um shell"
-funcionar sem ambiguidade.
+**Panel ↔ session is 1:1** (ADR-005): a panel hosts at most one live
+session. Requesting a second returns `409`; if the one there already
+exited (`exited`), the new one replaces it. It's the rule that makes
+"pressing Enter in a dead panel reopens a shell" work with no ambiguity.
 
-## Uma tarefa é um `git worktree`
+## A task is a `git worktree`
 
-`POST /api/tasks` cria `<repo>/.worktrees/<nome>` num branch de mesmo nome, e
-o workspace nasce apontando pra lá (ADR-009). `.worktrees/` entra no
-`.git/info/exclude` do repo, não no `.gitignore` versionado. A sidebar mostra
-`+N` (commits à frente do base) e `~M` (arquivos sujos) de um poller que só
-roda com a janela em foco recente. Merge e remoção passam pelas mesmas rotas,
-com recusas explícitas — worktree sujo, branch já mergeado, base inexistente
-— em vez de "dar um jeito".
+`POST /api/tasks` creates `<repo>/.worktrees/<name>` on a branch of the
+same name, and the workspace is born pointing there (ADR-009).
+`.worktrees/` goes into the repo's `.git/info/exclude`, not the versioned
+`.gitignore`. The sidebar shows `+N` (commits ahead of the base) and `~M`
+(dirty files) from a poller that only runs while the window has had
+recent focus. Merge and removal go through the same routes, with explicit
+refusals — dirty worktree, already-merged branch, missing base — instead
+of "figuring something out."
 
-## O monitor de uso
+## The usage monitor
 
-Quanto você já gastou hoje, na semana e no mês — em tokens e em custo estimado
-— e quanto ainda cabe nas janelas de limite da conta. Tudo local, tudo do que o
-Claude Code já grava (ADR-012, que substitui a ADR-008).
+How much you've already spent today, this week, and this month — in
+tokens and in estimated cost — and how much room is left in the account's
+limit windows. All local, all from what Claude Code already writes
+(ADR-012, which supersedes ADR-008).
 
-**Duas fontes, nenhuma delas remota:**
+**Two sources, neither of them remote:**
 
-| O quê | De onde vem | Quem alimenta |
+| What | Where from | Who feeds it |
 | --- | --- | --- |
-| Janelas de limite (5 h, semana, o que mais o payload trouxer) | `rate_limits` do payload do hook `StatusLine` | `api/hooks.ts` → `usage.noteLimits()` |
-| Consumo (tokens, custo, por dia/modelo/projeto) | varredura das transcrições `*.jsonl` | `usagePoller.ts` → `usage.scan()` |
+| Limit windows (5 h, week, whatever else the payload brings) | `rate_limits` from the `StatusLine` hook payload | `api/hooks.ts` → `usage.noteLimits()` |
+| Consumption (tokens, cost, by day/model/project) | sweep of the `*.jsonl` transcripts | `usagePoller.ts` → `usage.scan()` |
 
-**A varredura é incremental e cede o event loop.** `usage/transcripts.ts` desce
-`<claudeHome>\projects` recursivamente (≤ 8 níveis, sem seguir link simbólico),
-classifica cada arquivo em `main` (solto na pasta do projeto) ou `subagents`
-(aninhado), e lê cada um **a partir do offset gravado**, em fatias de 256 KB,
-cedendo o loop entre elas — o core hospeda todos os PTYs, e um `readSync` de
-megabytes seguraria os terminais. O que sai da leitura são **contagens**:
-tokens, id do modelo, `cwd` e carimbo de tempo. Conteúdo de mensagem não é
-extraído e portanto não pode ser gravado.
+**The sweep is incremental and yields the event loop.**
+`usage/transcripts.ts` walks `<claudeHome>\projects` recursively (≤ 8
+levels, without following a symbolic link), classifies each file as
+`main` (loose in the project folder) or `subagents` (nested), and reads
+each one **from its stored offset**, in 256 KB slices, yielding the loop
+between them — the core hosts every PTY, and a multi-megabyte `readSync`
+would stall the terminals. What comes out of the read are **counts**:
+tokens, model id, `cwd`, and timestamp. Message content is not extracted
+and therefore can't be stored.
 
-**O que o banco guarda:** `usage_files` (o marcador de leitura por transcrição:
-tamanho, mtime, offset, última chave de dedupe e a impressão digital dos
-primeiros 512 bytes), `usage_daily` (contagens por dia × modelo × projeto ×
-origem, com o upsert que SOMA) e `usage_limits` (a última foto das janelas).
+**What the database stores:** `usage_files` (the read marker per
+transcript: size, mtime, offset, last dedupe key, and a fingerprint of
+the first 512 bytes), `usage_daily` (counts by day × model × project ×
+origin, with an upsert that ADDS), and `usage_limits` (the latest window
+snapshot).
 
-**Três decisões que explicam o resto do módulo:**
+**Three decisions that explain the rest of the module:**
 
-- **subagente conta.** Numa amostra da máquina do autor, 62,8 % dos tokens
-  vinham de transcrições de subagente. Contar só a conversa principal não é uma
-  simplificação, é um erro por um fator;
-- **custo é estimativa, e `null` não é `0`.** A tabela (`usage/pricing.json`)
-  tem `asOf` e fonte; modelo que não está nela conta em tokens e sai do custo,
-  com aviso nomeando-o. Um total baixo porque metade não tinha preço não pode
-  parecer boa notícia;
-- **a escrita de cache de 1 h é uma coluna própria.** Ela custa 2 × input
-  (a de 5 min, 1,25 ×), e o payload traz as duas somadas em
-  `cache_creation_input_tokens` com o detalhamento em `cache_creation`.
+- **subagents count.** In a sample from the author's machine, 62.8% of
+  tokens came from subagent transcripts. Counting only the main
+  conversation isn't a simplification, it's an error by a whole factor;
+- **cost is an estimate, and `null` isn't `0`.** The table
+  (`usage/pricing.json`) has an `asOf` and a source; a model not in it
+  counts in tokens and drops out of the cost, with a warning naming it. A
+  low total because half the models had no price can't look like good
+  news;
+- **the 1 h cache write is its own column.** It costs 2 × input (the 5
+  min one, 1.25 ×), and the payload brings both summed into
+  `cache_creation_input_tokens`, with the breakdown in `cache_creation`.
 
-Quem consome: `GET /api/usage` (o painel e a CLI), `GET /api/usage/limits` (a
-faixa da sidebar), `POST /api/usage/rescan` (o botão "Reler transcrições") e o
-evento `usage.changed`, que carrega as janelas, os dias tocados e o progresso
-da varredura (no máximo um por segundo — as janelas também, desde a 0.10.1).
+Who consumes it: `GET /api/usage` (the panel and the CLI),
+`GET /api/usage/limits` (the sidebar bar), `POST /api/usage/rescan` (the
+"Rescan transcripts" button), and the `usage.changed` event, which
+carries the windows, the days touched, and the sweep's progress (at most
+one per second — the windows too, since 0.10.1).
 
-**O atacante A7, e o sanitizador único (0.10.1).** Este é o **único** módulo do
-Bridge que trabalha sozinho, a cada 60 s, em cima de conteúdo que o dono não
-digitou: um `.jsonl` sob `<claudeHome>\projects` pode ter sido escrito por
-outro processo dele, por um agente rodando dentro de uma sessão, ou restaurado
-de um backup. A fase de segurança de 06/09/2026 acrescentou esse atacante ao
-modelo de ameaça e endureceu o módulo em cima dele: teto de linha (4 MiB, com a
-linha pulada e CONTADA em vez de travar o offset do arquivo), faixa nos
-contadores de token e no dia do carimbo, tabela de preços sem protótipo
-consultada por `Object.hasOwn`, listagem assíncrona com teto de arquivos, e
-tetos no payload da statusline (janelas, tamanho de chave, `resets_at`).
+**Attacker A7, and the single sanitizer (0.10.1).** This is the **only**
+Bridge module that works on its own, every 60 s, on content the owner
+didn't type: a `.jsonl` under `<claudeHome>\projects` may have been
+written by another process of theirs, by an agent running inside a
+session, or restored from a backup. The 2026-09-06 security phase added
+this attacker to the threat model and hardened the module against it:
+line cap (4 MiB, with the line skipped and COUNTED instead of locking the
+file's offset), range checks on token counts and the timestamp's day, a
+prototype-less pricing table looked up via `Object.hasOwn`, an
+asynchronous listing with a file cap, and caps on the statusline payload
+(windows, key size, `resets_at`).
 
-A peça transversal é `sanitizeDisplay`, em `@bridge/shared`: **uma** função
-pura para todo texto de fora que vai pra TELA — a statusline que o core devolve
-ao Claude Code, a saída humana do `bridge usage` e os `title`/`aria-label` do
-painel. Ela mora no `shared` pelo mesmo motivo de `formatUsd`: três pontas
-escrevendo o mesmo dado com três regras diferentes é como uma delas fica de
-fora na próxima mudança. O `--json` da CLI e o corpo da API continuam **crus**,
-de propósito: são dado, não tela, e cortá-los mentiria sobre o que está no
-disco.
+The cross-cutting piece is `sanitizeDisplay`, in `@bridge/shared`: **one**
+pure function for all outside text headed to the SCREEN — the statusline
+the core returns to Claude Code, the human-readable output of
+`bridge usage`, and the panel's `title`/`aria-label`. It lives in
+`shared` for the same reason as `formatUsd`: three spots writing the same
+data with three different rules is how one of them ends up out of sync on
+the next change. The CLI's `--json` and the API body stay **raw**, on
+purpose: they're data, not screen, and trimming them would lie about
+what's on disk.
 
-## As quatro dores verificadas (0.11.0)
+## The four verified pain points (0.11.0)
 
-Cinco módulos novos, todos no core, todos com a mesma forma: a decisão mora num
-módulo **sem I/O** e quem tem estado (o `core.ts`) chama. É o mesmo padrão do
-`usage/aggregate.ts` — é o que deixa a regra sob teste sem PTY, sem banco e sem
-`wsl.exe`.
+Five new modules, all in the core, all in the same shape: the decision
+lives in a module **with no I/O**, and whoever holds state (`core.ts`)
+calls it. It's the same pattern as `usage/aggregate.ts` — it's what keeps
+the rule under test without a PTY, a database, or `wsl.exe`.
 
-| Módulo | O que decide | Quem chama, e o que sai |
+| Module | What it decides | Who calls it, and what comes out |
 | --- | --- | --- |
-| `serverLimit.ts` | a saída do terminal casa com uma frase de limite do SERVIDOR? Janela rolante de 4 KB por sessão, ANSI removido, quatro padrões exatos | o `bus.on('pty.data')` do `core.ts` → `sessions.markServerLimited` → `session.state` com `serverLimit`. Sai no primeiro `Stop`/`UserPromptSubmit` (em `api/hooks.ts`) ou em 5 min |
-| `launcher.ts` | este lançamento de agente pode sair agora? (`slots` \| `jitter` \| `backoff`) — classe pura, com relógio, sorteio e agendador injetáveis | `POST /api/sessions` (**201** ou **202** com a posição), `GET /api/launcher`, `POST /api/launcher/launch-now`, `DELETE /api/launcher/pending/:id`, evento `launcher.changed` |
-| `environments.ts` | que ambientes esta máquina tem, e como traduzir cwd/`settings.json` pra dentro de uma distro (`wslpath`), com cache de 60 s | `GET /api/environments`; `resolveEnvContext` entra no `LaunchCtx` dos adaptadores (`adapters/shell.ts` e `adapters/claude.ts` montam o `wsl.exe`) |
-| `recap.ts` | o `--resume` voltou vazio? (`resumeOutcomeOf`) e o resumo determinístico do transcript antigo (`readRecap`/`buildRecap`, leitura pela cauda) | `api/hooks.ts` no `SessionStart` → `session.updated` com `resumeOutcome`; `POST /api/sessions/:id/recap` → `{ text }` |
-| `scopeGuard.ts` | este caminho está dentro da raiz da sessão? (`resolveTarget`, `scopeRootOf`, `checkScope`, `scopeDenyReply`) | `api/hooks.ts` no `PreToolUse`, **antes** do `adapter.onHook`: fora da raiz, a resposta É o `deny` e o adaptador nem é consultado. `sessions.noteScopeBlock` → `session.updated` com `scopeBlocks` |
+| `serverLimit.ts` | does the terminal output match a SERVER limit phrase? A 4 KB rolling window per session, ANSI stripped, four exact patterns | `core.ts`'s `bus.on('pty.data')` → `sessions.markServerLimited` → `session.state` with `serverLimit`. Cleared on the first `Stop`/`UserPromptSubmit` (in `api/hooks.ts`) or after 5 min |
+| `launcher.ts` | can this agent launch right now? (`slots` \| `jitter` \| `backoff`) — a pure class, with clock, RNG, and scheduler injectable | `POST /api/sessions` (**201** or **202** with the position), `GET /api/launcher`, `POST /api/launcher/launch-now`, `DELETE /api/launcher/pending/:id`, `launcher.changed` event |
+| `environments.ts` | what environments does this machine have, and how to translate cwd/`settings.json` into a distro (`wslpath`), with a 60 s cache | `GET /api/environments`; `resolveEnvContext` feeds the adapters' `LaunchCtx` (`adapters/shell.ts` and `adapters/claude.ts` assemble the `wsl.exe` call) |
+| `recap.ts` | did `--resume` come back empty? (`resumeOutcomeOf`) and the deterministic summary of the old transcript (`readRecap`/`buildRecap`, tail read) | `api/hooks.ts` on `SessionStart` → `session.updated` with `resumeOutcome`; `POST /api/sessions/:id/recap` → `{ text }` |
+| `scopeGuard.ts` | is this path inside the session's root? (`resolveTarget`, `scopeRootOf`, `checkScope`, `scopeDenyReply`) | `api/hooks.ts` on `PreToolUse`, **before** `adapter.onHook`: outside the root, the response IS the `deny`, and the adapter isn't even consulted. `sessions.noteScopeBlock` → `session.updated` with `scopeBlocks` |
 
-Duas coisas que valem a leitura no código antes de mexer:
+Two things worth reading in the code before touching it:
 
-- **o `PreToolUse` tem dois donos.** A guarda decide primeiro e, quando recusa,
-  `return` antes do adaptador — a ferramenta não vai rodar, então marcar
-  `session.tool` mostraria na sidebar um trabalho que não aconteceu;
-- **os hooks de uma sessão em WSL rodam pelo `node.exe` do WINDOWS**, por
-  interop, mesmo quando a distro tem `node`: o loopback do WSL2 em NAT não é
-  compartilhado, e o shim precisa alcançar o core em `127.0.0.1:<porta>` do
-  host ([ADR-013](adr/013-hooks-de-wsl-pelo-node-do-windows.md)).
+- **`PreToolUse` has two owners.** The guard decides first and, when it
+  refuses, `return`s before the adapter — the tool won't run, so marking
+  `session.tool` would show work in the sidebar that never happened;
+- **hooks for a WSL session run through WINDOWS's `node.exe`**, via
+  interop, even when the distro has its own `node`: WSL2's NAT loopback
+  isn't shared, and the shim needs to reach the core at
+  `127.0.0.1:<port>` on the host
+  ([ADR-013](adr/013-hooks-de-wsl-pelo-node-do-windows.md)).
 
-## O Claude Code aberto dentro de um shell (0.12.0)
+## Claude Code opened inside a shell (0.12.0)
 
-Um módulo novo, na mesma forma dos cinco acima — a decisão num arquivo sem I/O,
-e quem tem estado chamando:
+One new module, in the same shape as the five above — the decision in an
+I/O-free file, and whoever holds state calling it:
 
-| Módulo | O que decide | Quem chama, e o que sai |
+| Module | What it decides | Who calls it, and what comes out |
 | --- | --- | --- |
-| `adapters/hosted.ts` | qual é o `claude` REAL desta máquina (`resolveHostedTarget`/`hostedTargetFrom`), o CONTEÚDO exato dos wrappers de cada sessão de shell (`hostedFiles`: `settings.json` + `bin/claude.cmd` + `bin/claude`, ou o wrapper de distro no WSL) e como o `bin` entra no PATH (`prependPath`, `WSL_HOSTED_SHELL_COMMAND`) | `adapters/shell.ts` (`shellLaunch`) monta os `files` e o `env`; o `core.ts` (`createSessionReserved`) resolve o alvo ANTES do prepend e põe `hosted` no `LaunchCtx` quando `sessions.hostedAgents` está ligada e o `kind` é `shell` |
+| `adapters/hosted.ts` | what's the REAL `claude` on this machine (`resolveHostedTarget`/`hostedTargetFrom`), the exact CONTENT of each shell session's wrappers (`hostedFiles`: `settings.json` + `bin/claude.cmd` + `bin/claude`, or the distro wrapper on WSL) and how `bin` gets into PATH (`prependPath`, `WSL_HOSTED_SHELL_COMMAND`) | `adapters/shell.ts` (`shellLaunch`) assembles the `files` and `env`; `core.ts` (`createSessionReserved`) resolves the target BEFORE the prepend and puts `hosted` in the `LaunchCtx` when `sessions.hostedAgents` is on and `kind` is `shell` |
 
-Três coisas que só se veem no código:
+Three things you only see in the code:
 
-- **o wrapper `.cmd` é ASCII puro, e isso é obrigatório**: o cmd.exe lê arquivo
-  de lote na codepage OEM do console, não em UTF-8, então um caminho com acento
-  escrito ali chega mangled ao Claude. O alvo viaja no ambiente
-  (`BRIDGE_CLAUDE_BIN`) e o `settings.json` vem do `%~dp0`;
-- **a promoção mora na rota, não no adaptador** (`api/hooks.ts`): quando um hook
-  chega numa sessão `kind: 'shell'` que ainda não hospeda, a rota chama
-  `core.noteHosted` e segue pelo MESMO caminho de uma sessão de agente
-  (`adapters.claude`). O `SessionEnd` com motivo de saída é desviado ANTES do
-  adaptador, pra `core.noteHostedEnd` — senão a UI desenharia um `exited` de um
-  shell que continua vivo;
-- **`sessions.setHosted`/`clearHosted`** são o par que guarda a marca:
-  `setHosted` é idempotente (o `since` da primeira promoção fica de pé) e
-  `clearHosted` devolve a sessão a `idle` sem tocar em `agentSessionId`,
-  `quota`, `scopeBlocks` nem `exitCode` — o shell não morreu, só o Claude que
-  estava dentro dele.
+- **the `.cmd` wrapper is pure ASCII, and that's mandatory**: cmd.exe
+  reads a batch file in the console's OEM codepage, not UTF-8, so a path
+  with an accented character written there arrives mangled at Claude. The
+  target travels in the environment (`BRIDGE_CLAUDE_BIN`), and
+  `settings.json` comes from `%~dp0`;
+- **the promotion lives in the route, not the adapter** (`api/hooks.ts`):
+  when a hook arrives for a `kind: 'shell'` session that isn't hosting
+  yet, the route calls `core.noteHosted` and follows the SAME path as an
+  agent session (`adapters.claude`). `SessionEnd` with an exit reason is
+  diverted BEFORE the adapter, to `core.noteHostedEnd` — otherwise the UI
+  would draw an `exited` for a shell that's still alive;
+- **`sessions.setHosted`/`clearHosted`** are the pair that holds the
+  mark: `setHosted` is idempotent (the first promotion's `since` stays
+  put) and `clearHosted` returns the session to `idle` without touching
+  `agentSessionId`, `quota`, `scopeBlocks`, or `exitCode` — the shell
+  didn't die, only the Claude that was inside it.
 
-## O idioma (0.13.0)
+## The language (0.13.0)
 
-Todo texto que uma pessoa lê sai de **um** catálogo, em `@bridge/shared`. São
-quatro arquivos:
+Every piece of text a person reads comes from **one** catalog, in
+`@bridge/shared`. Four files:
 
-| Arquivo | O que é |
+| File | What it is |
 | --- | --- |
-| `shared/src/i18n/pt-BR.ts` | a **fonte das chaves**: um objeto `as const`, e `MessageKey = keyof typeof ptBR` |
-| `shared/src/i18n/en.ts` | as MESMAS chaves, preso por `satisfies Record<MessageKey, string>` — chave faltando **ou sobrando** é erro de tipo, não de runtime |
-| `shared/src/i18n/index.ts` | `t(lang, key, params?)` (interpola `{nome}`, sem dependência nova), `resolveLanguage`, `systemLanguage`, `currentSystemLocale`, `LANGUAGES`, `INTL_LOCALE` |
-| `shared/src/i18n/guard.ts` | `findUncataloguedLiterals(source, opts)` — a varredura pura que os testes de guarda de cada pacote rodam. **Não** é reexportada pela raiz do pacote: quem a usa é teste, e ela não tem por que entrar no bundle da UI |
+| `shared/src/i18n/pt-BR.ts` | the **source of the keys**: an `as const` object, and `MessageKey = keyof typeof ptBR` |
+| `shared/src/i18n/en.ts` | the SAME keys, pinned by `satisfies Record<MessageKey, string>` — a missing **or extra** key is a type error, not a runtime one |
+| `shared/src/i18n/index.ts` | `t(lang, key, params?)` (interpolates `{name}`, no new dependency), `resolveLanguage`, `systemLanguage`, `currentSystemLocale`, `LANGUAGES`, `INTL_LOCALE` |
+| `shared/src/i18n/guard.ts` | `findUncataloguedLiterals(source, opts)` — the pure sweep each package's guard test runs. It's **not** re-exported from the package root: only tests use it, and there's no reason for it to enter the UI bundle |
 
-`shared/src/format.ts` (custo, tokens, contagem, tempo relativo) recebe `lang`
-**obrigatório** e usa `Intl` com `INTL_LOCALE[lang]`. O tempo relativo sai do
-catálogo, não do `Intl.RelativeTimeFormat`: "há 1 min" e "1 min ago" cabem em
-duas chaves e não pagam a construção de um formatador por linha da sidebar.
+`shared/src/format.ts` (cost, tokens, count, relative time) takes `lang`
+as a **required** argument and uses `Intl` with `INTL_LOCALE[lang]`.
+Relative time comes from the catalog, not `Intl.RelativeTimeFormat`:
+"há 1 min" and "1 min ago" fit in two keys and don't pay for building a
+formatter per sidebar row.
 
-**Como o idioma chega em cada processo.** Quem resolve `'system'` é o **core**,
-uma vez, no `updateConfig` (`core.ts`, `language()`): a locale da máquina não
-muda com o app aberto, e resolver a cada notificação faria cada uma pagar um
-`Intl.DateTimeFormat()`. Todo mundo consome o resultado dele,
-`configSnapshot().languageResolved`, e **ninguém resolve de novo**:
+**How the language reaches each process.** Whoever resolves `'system'` is
+the **core**, once, in `updateConfig` (`core.ts`, `language()`): the
+machine's locale doesn't change while the app is open, and resolving it
+on every notification would make each one pay for an
+`Intl.DateTimeFormat()`. Everyone else consumes its result,
+`configSnapshot().languageResolved`, and **no one resolves it again**:
 
-| Processo | Como pega | Fallback antes da primeira resposta |
+| Process | How it gets it | Fallback before the first response |
 | --- | --- | --- |
-| core | `core.language()`, lido **ao vivo** em cada mensagem, notificação, statusline e razão de `deny` | — |
-| UI | `languageResolved` do `GET /api/config` e do `config.changed` do `/ws`; `LanguageProvider` → `useT()`/`useLang()` (`ui/src/i18n.tsx`) | `navigator.language` (`browserLanguage()`), só até a config chegar |
-| shell (main) | `readCoreLanguage()` no boot + o evento `config.changed` (`shell/src/language.ts`, `tShell`) | `app.getLocale()` (`bootLanguage`), porque o diálogo "o core não subiu" é, por definição, o de quem não conseguiu perguntar nada |
-| CLI | `languageResolved` da ÚNICA chamada que ela faz ao `/api/config` (`cli/src/lang.ts`) | `BRIDGE_LANG`, depois a locale da máquina — é o que faz `bridge --help` funcionar com o Bridge fechado |
+| core | `core.language()`, read **live** on every message, notification, statusline, and `deny` reason | — |
+| UI | `languageResolved` from `GET /api/config` and `/ws`'s `config.changed`; `LanguageProvider` → `useT()`/`useLang()` (`ui/src/i18n.tsx`) | `navigator.language` (`browserLanguage()`), only until config arrives |
+| shell (main) | `readCoreLanguage()` at boot + the `config.changed` event (`shell/src/language.ts`, `tShell`) | `app.getLocale()` (`bootLanguage`), because the "core didn't start" dialog is, by definition, for someone who couldn't ask it anything |
+| CLI | `languageResolved` from the ONE call it makes to `/api/config` (`cli/src/lang.ts`) | `BRIDGE_LANG`, then the machine's locale — that's what makes `bridge --help` work with Bridge closed |
 
-**A troca é ao vivo, e é por isso que não há constante de texto.** Uma
-`const RECAP_BANNER = 'retomando…'` é avaliada na importação do módulo e
-congelaria o idioma da primeira montagem; toda uma família dessas virou função
-de `lang` (`environmentLabel`, `detail*`, `recapBannerText`, `tableColumns`, …).
-No `main` do Electron a exceção é a **bandeja**, o único texto que fica NA TELA
-entre dois eventos: o `Menu` é imutável depois de montado, então
-`TrayHandles.setLanguage` remonta o template — e o `setShellLanguage` só devolve
-`true` quando o idioma MUDOU, senão todo `config.changed` (fonte do terminal,
-teto do escalonador) remontaria o menu à toa.
+**The switch is live, and that's why there's no text constant.** A
+`const RECAP_BANNER = 'resuming…'` gets evaluated at module import and
+would freeze the language at first mount; a whole family of these became
+functions of `lang` (`environmentLabel`, `detail*`, `recapBannerText`,
+`tableColumns`, …). In Electron's `main` the exception is the **tray**,
+the only text that stays ON SCREEN between two events: the `Menu` is
+immutable once built, so `TrayHandles.setLanguage` rebuilds the template —
+and `setShellLanguage` only returns `true` when the language ACTUALLY
+CHANGED, otherwise every `config.changed` (terminal font, scheduler cap)
+would rebuild the menu for nothing.
 
-**Duas coisas viajam como CHAVE, não como frase**, porque o produtor não tem
-idioma e o consumidor tem: `LoginItemState.status` (main → IPC → `settingsModel`
-da UI, traduzido com o idioma da JANELA) e `CoreExit.fatal`/`CoreStartError.key`
-(`sidecar.ts` → `main.ts`, traduzido no instante de abrir o `showErrorBox`). O
-bônus é de suporte: `shell.fatal.semNode` no `shell.log` diz mais do que a frase
-no idioma de quem reportou.
+**Two things travel as a KEY, not a sentence**, because the producer has
+no language and the consumer does: `LoginItemState.status` (main → IPC →
+the UI's `settingsModel`, translated with the window's language) and
+`CoreExit.fatal`/`CoreStartError.key` (`sidecar.ts` → `main.ts`,
+translated the instant `showErrorBox` opens). The bonus is for support:
+`shell.fatal.semNode` in `shell.log` says more than the sentence in the
+reporter's language.
 
-**A guarda.** Um teste por pacote (`i18n-guard-shared.test.ts`,
-`i18n-guard-core.test.ts`, `i18n-guard-ui.test.ts`, `i18n-guard-shell.test.ts` e
-o bloco final de `cli/test/i18n-cli.test.ts`) varre o `src/` daquele pacote
-procurando literal com acento ou palavra
-pt-BR comum fora do catálogo, e falha listando `arquivo:linha`. É a trava contra
-string nova entrar sem chave. Cada teste tem uma **allowlist de regex por
-família** (log, `debug`, `appendShellLog`) e o código pode carregar um
-`// i18n-ignore` na linha, com o motivo ao lado — perdão de família mora no
-teste, perdão de uma linha mora na linha. A allowlist da UI é **vazia**, e um
-segundo teste no arquivo é o que a mantém assim.
+**The guard.** One test per package (`i18n-guard-shared.test.ts`,
+`i18n-guard-core.test.ts`, `i18n-guard-ui.test.ts`,
+`i18n-guard-shell.test.ts`, and the final block of
+`cli/test/i18n-cli.test.ts`) sweeps that package's `src/` looking for an
+accented literal or a common pt-BR word outside the catalog, and fails
+listing `file:line`. It's the lock against a new string slipping in
+without a key. Each test has a **per-family regex allowlist** (log,
+`debug`, `appendShellLog`), and the code can carry a `// i18n-ignore` on
+the line, with the reason next to it — family-wide pardon lives in the
+test, single-line pardon lives on the line. The UI's allowlist is
+**empty**, and a second test in the file is what keeps it that way.
 
-**O ponto cego declarado:** o guard olha ACENTO em literal. `Todos`, `Base`,
-`Msg`, `Total` — pt-BR sem acento, e ainda por cima em texto de JSX — passam.
-Foi a varredura de olho, e não o teste, que achou esses. Quem acrescenta copy em
-`.tsx` precisa contar com isso (ver `CONTRIBUTING.md`).
+**The declared blind spot:** the guard looks for ACCENTS in literals.
+`Todos`, `Base`, `Msg`, `Total` — pt-BR without an accent, and on top of
+that inside JSX text — slip through. It was the eyeball sweep, not the
+test, that found these. Whoever adds copy in a `.tsx` needs to account for
+this (see `CONTRIBUTING.md`).
 
-## Persistência
+## Persistence
 
-Tudo mora no perfil, `%APPDATA%\bridge` (ou `BRIDGE_PROFILE_DIR`):
+Everything lives in the profile, `%APPDATA%\bridge` (or
+`BRIDGE_PROFILE_DIR`):
 
-| Arquivo | O que é |
+| File | What it is |
 | --- | --- |
-| `config.json` | porta, shell, poll de git, toasts, fonte do terminal, restauração, `usage` (custo e tabela de preços) e `ui` (o idioma, 0.13.0). Escrito de forma atômica. |
-| `keybindings.json` | o mapa de atalhos, lido a cada pedido |
-| `bridge.db` | SQLite: repos, workspaces, abas, painéis, layout, notificações, cota da sessão e as três tabelas do monitor de uso (`usage_files`, `usage_daily`, `usage_limits`) |
-| `instance.json` | porta + token da instância viva (modo `0600`) |
+| `config.json` | port, shell, git poll, toasts, terminal font, restoration, `usage` (cost and pricing table), and `ui` (the language, 0.13.0). Written atomically. |
+| `keybindings.json` | the keybinding map, read on every request |
+| `bridge.db` | SQLite: repos, workspaces, tabs, panels, layout, notifications, session quota, and the usage monitor's three tables (`usage_files`, `usage_daily`, `usage_limits`) |
+| `instance.json` | port + live instance token (mode `0600`) |
 | `logs\core.log`, `logs\shell.log` | logs |
-| `sessions\<id>\` | o `settings.json` daquela sessão; some quando a sessão morre |
+| `sessions\<id>\` | that session's `settings.json`; disappears when the session dies |
 
-**Sessão não é persistida.** Ao reabrir, o Bridge restaura o *layout* e decide
-por painel: quem tinha um Claude Code vivo volta com `claude --resume <id>` (se
-`restore.resumeAgents` estiver ligado), o resto volta como shell.
+**A session isn't persisted.** On reopening, Bridge restores the
+*layout* and decides per panel: whoever had a live Claude Code comes back
+with `claude --resume <id>` (if `restore.resumeAgents` is on), the rest
+comes back as a shell.
 
-**Restauração × workspace nascendo.** A restauração é por workspace ativado, e
-criar um workspace muda o layout ANTES de o `POST` responder com o id — então
-não dá pra saber pelo id quem está nascendo. O `App` mantém um registro de
-criações em voo (`restore.ts`), uma entrada por criação, guardando os
-workspaces que JÁ existiam quando aquele pedido começou: quem estava lá
-restaura normal, o suspeito é pulado **sem** ser marcado como restaurado, e o
-fim de uma criação reexamina o workspace ativo. A entrada é fechada por
-IDENTIDADE (a função que o `begin` devolve, idempotente), não por posição —
-duas criações cruzadas terminando fora de ordem removeriam a errada.
+**Restoration × a workspace being born.** Restoration happens per
+activated workspace, and creating a workspace changes the layout BEFORE
+the `POST` responds with the id — so there's no way to tell from the id
+who's being born. The `App` keeps a registry of in-flight creations
+(`restore.ts`), one entry per creation, holding the workspaces that
+ALREADY existed when that request began: whoever was already there
+restores normally, the suspect is skipped **without** being marked as
+restored, and the end of a creation re-examines the active workspace. The
+entry is closed by IDENTITY (the function `begin` returns, idempotent),
+not by position — two creations crossing and finishing out of order would
+remove the wrong one.
 
-**Higiene de temporários.** O Bridge não escreve fora do perfil: o
-`settings.json` de cada sessão mora em `sessions\<id>\` e some com ela, e o
-dump de hook vai pra `logs\` confinado por prefixo, com nome derivado de
-`basename()` e teto de 8 MB por arquivo. Quem cria pasta em `%TEMP%` é a
-SUÍTE, não o app: o `globalSetup` do vitest e o e2e trabalham em pastas
-`bridge-*` e as apagam no fim — uma execução interrompida (ou um cenário de
-e2e que falhe segurando o `cwd`) pode deixar uma pra trás, e o corte de 1 hora
-do `globalSetup` seguinte é quem varre.
+**Temp file hygiene.** Bridge doesn't write outside the profile: each
+session's `settings.json` lives in `sessions\<id>\` and disappears with
+it, and the hook dump goes to `logs\`, confined by prefix, with a name
+derived from `basename()` and an 8 MB per-file cap. Whoever creates
+folders in `%TEMP%` is the TEST SUITE, not the app: vitest's
+`globalSetup` and e2e work in `bridge-*` folders and delete them
+afterward — an interrupted run (or an e2e scenario that fails while
+holding the `cwd`) can leave one behind, and the following
+`globalSetup`'s 1-hour cutoff is what sweeps it up.
 
-**Modelo de confiança, em uma frase.** O Bridge trata a máquina e quem está
-logado nela como confiáveis, e **tudo que entra de fora como hostil** — a
-saída do terminal, o payload de hook e o
-**repositório git**, que é código de terceiro capaz de rodar comando por
-`filter.*` a cada `git status`: por isso o core detecta os drivers e
-**pergunta** (`Repo.trustFilters`) em vez de neutralizar. O modelo de ameaça
-inteiro, com o que ficou aceito, está em [`../SECURITY.md`](../SECURITY.md).
+**Trust model, in one sentence.** Bridge treats the machine and whoever's
+logged into it as trusted, and **treats everything coming from outside as
+hostile** — terminal output, hook payloads, and the **git repository**,
+which is third-party code capable of running a command via `filter.*` on
+every `git status`: that's why the core detects the drivers and **asks**
+(`Repo.trustFilters`) instead of neutralizing them. The whole threat
+model, with what was accepted, is in [`../SECURITY.md`](../SECURITY.md).
 
-## O empacotamento
+## Packaging
 
-`npm run dist` gera um NSIS x64 por usuário. O core vai **fora** do `asar`
-(ADR-010), em `resources/`: `core/dist/index.mjs`, `core/bin/*.cjs`,
-`core/node_modules/` (só runtime, instalado com `npm ci` a partir de um par
-`package.json`+lockfile versionado em `packages/shell/stage/`), `ui/` (o build
-do Vite, que o core serve em `/`) e `cli/`. Os módulos nativos ficam com os
-prebuilds do **Node do sistema** — nada de `@electron/rebuild`.
+`npm run dist` produces a per-user NSIS x64 installer. The core goes
+**outside** the `asar` (ADR-010), in `resources/`: `core/dist/index.mjs`,
+`core/bin/*.cjs`, `core/node_modules/` (runtime only, installed with
+`npm ci` from a `package.json`+lockfile pair versioned under
+`packages/shell/stage/`), `ui/` (the Vite build, which the core serves at
+`/`), and `cli/`. Native modules keep the **system Node**'s prebuilds —
+no `@electron/rebuild`.
 
-## Testes
+## Tests
 
-- **vitest por pacote** para tudo que é função pura e rota: o padrão é extrair
-  a decisão num módulo sem I/O (`settingsModel.ts`, `sidebarModel.ts`,
-  `usage/aggregate.ts`) e testar isso, não o componente.
-- **Playwright + Electron real** (`packages/shell/test/e2e.spec.ts`, `npm run
-  e2e`): 17 cenários com core, PTY e janela de verdade; no fim de cada um ele
-  confere que nenhum processo sobrou. Só o cenário do `resume` levanta um Claude
-  Code de verdade; os outros que precisam de um agente usam um `claude.cmd`
-  falso no começo do `PATH`, porque o que está sob prova é o caminho do dado, e
-  não o binário.
-- `npm run typecheck` é parte do contrato: `packages/ui/test/types-contract.test.ts`
-  importa os tipos do core e quebra o typecheck da UI se os dois divergirem.
+- **vitest per package** for everything that's a pure function or a
+  route: the standard is extracting the decision into an I/O-free module
+  (`settingsModel.ts`, `sidebarModel.ts`, `usage/aggregate.ts`) and
+  testing that, not the component.
+- **Playwright + real Electron** (`packages/shell/test/e2e.spec.ts`,
+  `npm run e2e`): 17 scenarios with a real core, PTY, and window; at the
+  end of each one it checks that no process was left behind. Only the
+  `resume` scenario spins up a real Claude Code; the others that need an
+  agent use a fake `claude.cmd` at the front of the `PATH`, because
+  what's under test is the data path, not the binary.
+- `npm run typecheck` is part of the contract:
+  `packages/ui/test/types-contract.test.ts` imports the core's types and
+  breaks the UI's typecheck if the two diverge.
 
-## Onde procurar cada coisa
+## Where to look for what
 
-| Quero mexer em… | Comece por |
+| Want to touch… | Start with |
 | --- | --- |
-| estado do agente, hooks | `packages/core/src/adapters/claude.ts` |
-| rotas HTTP | `packages/core/src/api/routes.ts` + `schemas.ts` |
+| agent state, hooks | `packages/core/src/adapters/claude.ts` |
+| HTTP routes | `packages/core/src/api/routes.ts` + `schemas.ts` |
 | PTY, scrollback, backpressure | `packages/core/src/pty.ts` |
-| árvore de painéis | `packages/core/src/layout.ts` |
-| worktree e git | `packages/core/src/git.ts`, `gitPoller.ts` |
-| monitor de uso | `packages/core/src/usage/` + `usagePoller.ts`; na UI, `usageModel.ts` + `components/usage/` |
-| limite do servidor, fila de lançamento | `packages/core/src/serverLimit.ts` + `launcher.ts`; na UI, `sidebarModel.ts` (`serverLimitBadge`, `launcherQueueLine`) |
-| ambiente da sessão (pwsh/Git Bash/WSL) | `packages/core/src/environments.ts` + `adapters/{shell,claude}.ts`; no shared, `environment.ts` |
-| resume vazio e o resumo | `packages/core/src/recap.ts`; na UI, `recap.ts` + `components/Pane.tsx` |
-| guarda de escopo | `packages/core/src/scopeGuard.ts` + o bloco `PreToolUse` de `api/hooks.ts` |
-| o wrapper `claude` de cada shell | `packages/core/src/adapters/hosted.ts` + `adapters/shell.ts` (`shellLaunch`) |
-| promoção da sessão de shell a hospedeira | o ramo `kind === 'shell'` de `packages/core/src/api/hooks.ts` + `core.ts` (`noteHosted`, `noteHostedEnd`) e `sessions.ts` (`setHosted`, `clearHosted`) |
-| rótulo `claude` de uma hospedeira na tela | `packages/ui/src/sidebarModel.ts` (`sessionLabel`, `sessionDetail`, `runsAgent`) + `paneModel.ts` (`paneDetail`) |
+| panel tree | `packages/core/src/layout.ts` |
+| worktree and git | `packages/core/src/git.ts`, `gitPoller.ts` |
+| usage monitor | `packages/core/src/usage/` + `usagePoller.ts`; in the UI, `usageModel.ts` + `components/usage/` |
+| server limit, launch queue | `packages/core/src/serverLimit.ts` + `launcher.ts`; in the UI, `sidebarModel.ts` (`serverLimitBadge`, `launcherQueueLine`) |
+| session environment (pwsh/Git Bash/WSL) | `packages/core/src/environments.ts` + `adapters/{shell,claude}.ts`; in shared, `environment.ts` |
+| empty resume and the recap | `packages/core/src/recap.ts`; in the UI, `recap.ts` + `components/Pane.tsx` |
+| scope guard | `packages/core/src/scopeGuard.ts` + the `PreToolUse` block of `api/hooks.ts` |
+| each shell's `claude` wrapper | `packages/core/src/adapters/hosted.ts` + `adapters/shell.ts` (`shellLaunch`) |
+| promoting a shell session to host | the `kind === 'shell'` branch of `packages/core/src/api/hooks.ts` + `core.ts` (`noteHosted`, `noteHostedEnd`) and `sessions.ts` (`setHosted`, `clearHosted`) |
+| a host's `claude` label on screen | `packages/ui/src/sidebarModel.ts` (`sessionLabel`, `sessionDetail`, `runsAgent`) + `paneModel.ts` (`paneDetail`) |
 | sidebar | `packages/ui/src/sidebarModel.ts` + `components/sidebar/` |
-| atalhos | `packages/shared/src/protocol.ts` (`DEFAULT_KEYBINDINGS`) |
-| o texto de qualquer tela, em qualquer idioma | `packages/shared/src/i18n/pt-BR.ts` + `en.ts` (a chave é por SUPERFÍCIE: `sidebar.rodape.novaTarefa`, `uso.painel.total`) |
-| como o idioma chega em cada processo | `packages/core/src/core.ts` (`language()`), `packages/ui/src/i18n.tsx`, `packages/shell/src/language.ts`, `packages/cli/src/lang.ts` |
-| o seletor de idioma | `packages/ui/src/settingsModel.ts` (`languageOptions`) + o ramo `appearance` do `components/SettingsDialog.tsx` |
-| janela, bandeja, toast | `packages/shell/src/main.ts`, `tray.ts` |
-| quem manda `resize` pro PTY quando há dois xterms na mesma sessão | `packages/ui/src/terminalGrid.ts` (`gridAfterSync`) + as props `readOnly`/`onFitted` do `components/Terminal.tsx` |
-| marca de restauração do painel (quem encerrou) | `packages/core/src/core.ts` (`createSessionReserved`, o ouvinte de `session.exited` e o `stop()`) + `layout.ts` (`setPaneEnded`) e a migração de `db.ts` (`rescueOrphanAgentPanes`); na UI, `restore.ts` (`panesToRestore`) |
-| encerrar o core (saída normal e fim de sessão do Windows) | `packages/shell/src/shutdown.ts` + os ouvintes `before-quit`/`will-quit`/`session-end` do `main.ts` |
-| empacotamento | `packages/shell/electron-builder.yml`, `scripts/stage-core.mjs` |
+| keybindings | `packages/shared/src/protocol.ts` (`DEFAULT_KEYBINDINGS`) |
+| any screen's text, in any language | `packages/shared/src/i18n/pt-BR.ts` + `en.ts` (the key is by SURFACE: `sidebar.rodape.novaTarefa`, `uso.painel.total`) |
+| how the language reaches each process | `packages/core/src/core.ts` (`language()`), `packages/ui/src/i18n.tsx`, `packages/shell/src/language.ts`, `packages/cli/src/lang.ts` |
+| the language selector | `packages/ui/src/settingsModel.ts` (`languageOptions`) + the `appearance` branch of `components/SettingsDialog.tsx` |
+| window, tray, toast | `packages/shell/src/main.ts`, `tray.ts` |
+| who sends `resize` to the PTY when there are two xterms in the same session | `packages/ui/src/terminalGrid.ts` (`gridAfterSync`) + the `readOnly`/`onFitted` props of `components/Terminal.tsx` |
+| panel restoration mark (who ended it) | `packages/core/src/core.ts` (`createSessionReserved`, the `session.exited` listener and `stop()`) + `layout.ts` (`setPaneEnded`) and the `db.ts` migration (`rescueOrphanAgentPanes`); in the UI, `restore.ts` (`panesToRestore`) |
+| shutting down the core (normal exit and Windows session end) | `packages/shell/src/shutdown.ts` + the `before-quit`/`will-quit`/`session-end` listeners in `main.ts` |
+| packaging | `packages/shell/electron-builder.yml`, `scripts/stage-core.mjs` |

@@ -1,16 +1,16 @@
-# ADR-007 — Política de toast: o core decide `toast`, o shell coalesce leading-edge por sessão
+# ADR-007 — Toast policy: the core decides `toast`, the shell coalesces leading-edge per session
 
-**Status:** aceita (spec §4; ruling da Fase 2, Task 8)
+**Status:** accepted (spec §4; Phase 2 ruling, Task 8)
 
-## Contexto
+## Context
 
-O toast tem que sair quando o agente termina ou pede input **e** o usuário não está olhando aquela sessão; rajadas (vários `done` em segundos) não podem virar uma chuva de notificações; e o primeiro aviso não pode atrasar.
+The toast has to fire when the agent finishes or wants input **and** the user isn't looking at that session; bursts (several `done`s in seconds) can't turn into a flood of notifications; and the first alert can't be delayed.
 
-## Decisão
+## Decision
 
-O core aplica a política (`needs-input`, `done`, `stuck`, `custom`; `toast:false` quando a sessão é a focada na janela em foco) e manda `toast: true|false` no evento `notification.new`. O shell mostra o **primeiro** toast de uma sessão imediatamente; os seguintes dentro de 2 s viram um só ("n avisos · último: …") entregue ao fim da janela; sessões nunca se misturam. Clique no toast foca janela + workspace + aba + painel (IPC `bridge:focus-session` → `revealSession`). O objeto `Notification` fica retido num `Set` até fechar/clicar (senão o GC come o handler). `needs-input` fora de foco também faz `flashFrame`.
+The core applies the policy (`needs-input`, `done`, `stuck`, `custom`; `toast:false` when the session is the one focused in the focused window) and sends `toast: true|false` in the `notification.new` event. The shell shows a session's **first** toast immediately; the following ones within 2 s coalesce into one ("n notices · last: …") delivered at the end of the window; sessions never mix. Clicking the toast focuses window + workspace + tab + panel (IPC `bridge:focus-session` → `revealSession`). The `Notification` object is held in a `Set` until closed/clicked (otherwise GC eats the handler). `needs-input` out of focus also does `flashFrame`.
 
-## Consequências
+## Consequences
 
-- Contagem de não lidas tem fonte única no main (`presentUnread`), alimentada pelo `hello` e pelos eventos, e reaplicada em `did-finish-load`.
-- Para e2e, `BRIDGE_TOAST_LOG=<arquivo>` troca o toast por uma linha JSON.
+- Unread count has a single source in main (`presentUnread`), fed by `hello` and by events, and reapplied on `did-finish-load`.
+- For e2e, `BRIDGE_TOAST_LOG=<file>` swaps the toast for a JSON line.

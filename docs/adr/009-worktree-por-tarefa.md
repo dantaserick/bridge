@@ -1,16 +1,16 @@
-# ADR-009 — Um worktree por tarefa em `.worktrees/<nome>` dentro do repo
+# ADR-009 — One worktree per task in `.worktrees/<name>` inside the repo
 
-**Status:** aceita (decisão do dono no brainstorming; spec §7; Fase 3)
+**Status:** accepted (owner's decision at brainstorming; spec §7; Phase 3)
 
-## Contexto
+## Context
 
-O dono trabalha com um worktree por tarefa dentro do repo, branch por tarefa, merge no main e remoção ao terminar. O cmux não cria worktrees (o blog dele sugere um "superrepo" manual).
+The owner works with one worktree per task inside the repo, one branch per task, merging into main and removing it when done. cmux doesn't create worktrees (its blog suggests a manual "superrepo").
 
-## Decisão
+## Decision
 
-"Nova tarefa" roda `git worktree add .worktrees/<nome> -b <nome> <base>` no repo escolhido, garante `.worktrees/` em `.git/info/exclude` e cria o workspace apontando pra essa pasta (com Claude Code se pedido). A sidebar mostra branch, `+N` (commits à frente do base) e `~M` (arquivos alterados), atualizados por poll de 15 s e logo após um `Stop`. Menu: ver diff (`git --no-pager diff <base>...HEAD` num painel), mesclar (`--ff-only`, com oferta de `--no-ff`), remover worktree, abrir no Explorer. Recusas: merge com base sujo; remoção com worktree sujo ou branch não mesclado. Fora da v1: PR/GitHub, stash automático, rebase.
+"New task" runs `git worktree add .worktrees/<name> -b <name> <base>` in the chosen repo, makes sure `.worktrees/` is in `.git/info/exclude`, and creates the workspace pointing at that folder (with Claude Code if requested). The sidebar shows branch, `+N` (commits ahead of the base), and `~M` (changed files), refreshed by a 15 s poll and right after a `Stop`. Menu: view diff (`git --no-pager diff <base>...HEAD` in a panel), merge (`--ff-only`, offering `--no-ff`), remove worktree, open in Explorer. Refusals: merging with a dirty base; removal with a dirty worktree or an unmerged branch. Out of scope for v1: PR/GitHub, automatic stash, rebase.
 
-## Consequências
+## Consequences
 
-- `git` é chamado por `execFile` com `windowsHide`, nunca por shell; testes usam repos temporários próprios (o repo do Bridge nunca é commitado pela IA — ADR-003).
-- Modelo já preparado desde a Fase 1: `Repo`, `Workspace.repoId/branch/worktree`, agrupamento por repo na sidebar.
+- `git` is called via `execFile` with `windowsHide`, never through a shell; tests use their own temporary repos (Bridge's own repo is never committed to by the AI — ADR-003).
+- The model was already prepared since Phase 1: `Repo`, `Workspace.repoId/branch/worktree`, grouping by repo in the sidebar.

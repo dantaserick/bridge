@@ -1,17 +1,17 @@
-# ADR-002 — Core como sidecar do Node do sistema
+# ADR-002 — Core as a sidecar of the system Node
 
-**Status:** aceita (ruling da Fase 2, Task 5); **revisitar na Fase 5**
+**Status:** accepted (Phase 2 ruling, Task 5); **revisit in Phase 5**
 
-## Contexto
+## Context
 
-A spec §3 dizia que o main do Electron embutiria o core no mesmo processo. `node-pty` e `better-sqlite3` são módulos nativos: rodar dentro do Electron exige recompilá-los pro ABI do Electron (`@electron/rebuild`). O monorepo tem um `node_modules` só; a recompilação quebraria a suíte do core, que roda no Node 24 do sistema.
+Spec §3 said Electron's main process would embed the core in the same process. `node-pty` and `better-sqlite3` are native modules: running inside Electron requires rebuilding them for Electron's ABI (`@electron/rebuild`). The monorepo has a single `node_modules`; rebuilding would break the core's test suite, which runs on the system's Node 24.
 
-## Decisão
+## Decision
 
-O main do Electron sobe o core como **processo filho** do Node do sistema (`BRIDGE_NODE` ou `node` do PATH) e fala com ele pela mesma API HTTP/WS que a UI usa. O sidecar lê `instance.json` pra descobrir porta e token. Encerramento: `POST /api/shutdown` com deadline de 1,5 s e `taskkill /t /f` de reserva (o `tsx` re-forka em dev, então `child.kill()` deixaria órfãos). Um core do perfil que continue vivo é **adotado** na subida seguinte se responder `GET /api/state` (e `GET /` quando o shell espera UI).
+Electron's main process spawns the core as a **child process** of the system Node (`BRIDGE_NODE` or `node` from PATH) and talks to it through the same HTTP/WS API the UI uses. The sidecar reads `instance.json` to find the port and token. Shutdown: `POST /api/shutdown` with a 1.5 s deadline and a `taskkill /t /f` fallback (`tsx` re-forks in dev, so `child.kill()` would leave orphans). A core from the profile that's still alive is **adopted** on the next startup if it responds to `GET /api/state` (and `GET /` when the shell expects the UI).
 
-## Consequências
+## Consequences
 
-- O app **exige Node.js 22+ na máquina**. É o custo assumido até a Fase 5.
-- Toda a comunicação main↔core passa pela API (bem: é a mesma fronteira da UI e da CLI; mal: o main não vê o bus in-process, então usa um cliente WS filtrado `?events=`).
-- Reverter exige rebuild dos nativos numa instalação separada de produção, ou trocar `better-sqlite3` pelo `node:sqlite` e o `node-pty` por prebuild com ABI do Electron.
+- The app **requires Node.js 22+ on the machine**. It's the accepted cost until Phase 5.
+- All main↔core communication goes through the API (good: it's the same boundary as the UI and the CLI; bad: main doesn't see the in-process bus, so it uses a filtered WS client, `?events=`).
+- Reverting this requires rebuilding the natives in a separate production install, or swapping `better-sqlite3` for `node:sqlite` and `node-pty` for a prebuild with Electron's ABI.

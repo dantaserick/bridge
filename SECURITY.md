@@ -1,469 +1,519 @@
-# Segurança do Bridge
+# Bridge security
 
-O Bridge é um app **local**: um core Fastify que escuta em `127.0.0.1`, uma UI
-servida por ele dentro do Electron, terminais em ConPTY e uma CLI. Não há
-servidor remoto, conta, nem dado seu saindo da máquina. Este documento diz o que
-o Bridge protege, o que ele **não** protege de propósito, e como avisar de uma
-falha.
+Bridge is a **local** app: a Fastify core listening on `127.0.0.1`, a UI
+served by it inside Electron, ConPTY terminals, and a CLI. There is no
+remote server, no account, and no data of yours leaving the machine. This
+document says what Bridge protects, what it deliberately does **not**
+protect, and how to report a flaw.
 
-Última revisão de segurança: **0.10.1 (06/09/2026)** — auditoria do monitor de
-uso e das superfícies novas desde a 0.8.0, com onda de correção e teste de
-ataque por achado. A fase anterior (**0.8.0**, 05/09/2026) cobriu o resto do
-app com auditoria, cinco rodadas de correção e re-review adversarial. Os planos
-das duas fases e os ledgers de execução
-(auditoria, report de correção e rulings) ficam fora do repositório público,
-como os das outras fases.
+Last security review: **0.10.1 (2026-09-06)** — audit of the usage monitor
+and the surfaces new since 0.8.0, with a fix-and-attack-test wave per
+finding. The previous phase (**0.8.0**, 2026-09-05) covered the rest of the
+app with an audit, five rounds of fixes, and an adversarial re-review. The
+plans for both phases and the execution ledgers (audit, fix report, and
+rulings) stay out of the public repository, like those of the other phases.
 
-## Versões
+## Versions
 
-O Bridge não tem versões antigas mantidas em paralelo: a correção sai na versão
-seguinte, e a única linha suportada é a **mais recente** (hoje, 0.15.0).
+Bridge doesn't keep old versions maintained in parallel: the fix ships in
+the next version, and the only supported line is the **latest** (today,
+0.15.0).
 
-## Modelo de ameaça
+## Threat model
 
-Seis atacantes considerados, todos com um caminho concreto até o Bridge:
+Six attackers considered, each with a concrete path to Bridge:
 
-- **A1 — saída hostil de um processo no terminal.** Um agente ou um `cat` de
-  arquivo qualquer imprimindo sequências OSC: título, notificação, texto que a
-  UI e o toast do Windows vão renderizar.
-- **A2 — outro processo local do mesmo usuário.** Lê o `instance.json`, pega o
-  token, fala com a API como se fosse a UI.
-- **A3 — conteúdo de repositório hostil.** Nome de branch, de worktree e de
-  tarefa; `.git/config`, `.gitattributes`, `.gitmodules` e hooks que vieram
-  junto num zip, backup ou pendrive.
-- **A4 — payload de hook malformado ou hostil.** O shim é chamado pelo agente
-  com o que ele quiser: `session_id`, evento, `transcript_path`, tamanho.
-- **A5 — cadeia de dependências e instalador.** `npm audit`, e o caminho de
-  instalação escolhido pelo usuário chegando numa linha de PowerShell do NSIS.
-- **A6 — transcrição hostil.** Um `.jsonl` sob `<claudeHome>\projects` escrito
-  por outro processo seu, por um agente rodando dentro de uma sessão, ou
-  restaurado de um backup: linha de dezenas de MB, JSON com tipos errados,
-  `cwd`/`model` com sequência de terminal ou 10 kB de tamanho, `timestamp` do
-  ano 275760, contador de token negativo ou `1e308`, nome de modelo igual a um
-  membro de `Object.prototype`, junction apontando pra fora da árvore, milhões
-  de arquivos. O monitor de uso (0.10.0) lê esses arquivos sozinho, a cada
-  60 s, sem ninguém pedir — é a única superfície do Bridge que trabalha em cima
-  de conteúdo que você não digitou.
+- **A1 — hostile output from a terminal process.** An agent or a `cat` of
+  any file printing OSC sequences: title, notification, text that the UI
+  and the Windows toast will render.
+- **A2 — another local process of the same user.** Reads `instance.json`,
+  grabs the token, talks to the API as if it were the UI.
+- **A3 — hostile repository content.** Branch name, worktree name, and
+  task name; `.git/config`, `.gitattributes`, `.gitmodules`, and hooks that
+  came along in a zip, backup, or flash drive.
+- **A4 — malformed or hostile hook payload.** The shim is called by the
+  agent with whatever it wants: `session_id`, event, `transcript_path`,
+  size.
+- **A5 — dependency chain and installer.** `npm audit`, and the install
+  path chosen by the user landing in an NSIS PowerShell line.
+- **A6 — hostile transcript.** A `.jsonl` under `<claudeHome>\projects`
+  written by another process of yours, by an agent running inside a
+  session, or restored from a backup: a line tens of MB long, JSON with
+  wrong types, `cwd`/`model` with a terminal escape sequence or 10 kB in
+  size, `timestamp` from the year 275760, a negative token count or
+  `1e308`, a model name equal to a member of `Object.prototype`, a junction
+  pointing outside the tree, millions of files. The usage monitor (0.10.0)
+  reads these files on its own, every 60 s, without anyone asking — it's
+  the only Bridge surface that works on content you didn't type.
 
-**O que fica FORA do escopo, declaradamente:**
+**What's declaredly OUT of scope:**
 
-- **Outro usuário da máquina.** O modelo é **mesmo usuário = mesma confiança**,
-  igual ao do próprio Claude Code: quem já roda código com a sua conta pode
-  fazer tudo que o Bridge faz, com ou sem o Bridge. A única defesa aqui é a ACL
-  do `instance.json` (abaixo), e ela é contra *outro* usuário, não contra você.
-- **Rede externa.** O core só escuta em loopback; não há autenticação de
-  múltiplos usuários porque não há múltiplos usuários.
-- **Ataque físico** à máquina.
+- **Another user of the machine.** The model is **same user = same
+  trust**, just like Claude Code's own: whoever already runs code under
+  your account can do everything Bridge does, with or without Bridge. The
+  only defense here is the `instance.json` ACL (below), and it's against
+  *another* user, not against you.
+- **External network.** The core only listens on loopback; there's no
+  multi-user authentication because there are no multiple users.
+- **Physical attack** on the machine.
 
-**Bens protegidos:** o token da instância; a execução de comandos no PTY
-(injeção de comando ou de argumento); os arquivos do usuário (travessia de
-caminho em `openPath`, `cwd`, worktrees); a integridade da UI (XSS via dado de
-terminal, hook ou git); a disponibilidade do core (DoS por WS, hook ou corpo
-grande); a privacidade dos logs (payload de hook com conteúdo de conversa) **e
-o conteúdo das suas conversas com o agente**, que o monitor de uso lê e não
-guarda (abaixo).
+**Protected assets:** the instance token; command execution in the PTY
+(command or argument injection); the user's files (path traversal in
+`openPath`, `cwd`, worktrees); UI integrity (XSS via terminal, hook, or
+git data); core availability (DoS via WS, hook, or large body); log
+privacy (hook payload with conversation content) **and the content of
+your conversations with the agent**, which the usage monitor reads and
+does not store (below).
 
-## O que está em pé hoje
+## What's in place today
 
-**Autenticação e superfície HTTP.** Toda rota exige `Authorization: Bearer` —
-a classificação é **default-deny**: o que não for reconhecido como público (a
-UI estática do `BRIDGE_UI_DIR`) é tratado como protegido. O caminho é
-classificado pela união da forma CRUA com a normalizada, e qualquer `%2F`,
-`%5C` ou `\` no caminho é **400** antes de qualquer decisão — separador
-codificado não existe em nenhum cliente legítimo. Request-target que não começa
-com `/` (forma absoluta, `CONNECT`, `OPTIONS *`) é **400** antes da
-classificação: era por ali que o auth foi furado no re-review. `Origin` fora de
-loopback é recusado, e `/hooks/*` exige o token sempre.
+**Authentication and HTTP surface.** Every route requires
+`Authorization: Bearer` — the classification is **default-deny**: anything
+not recognized as public (the static UI at `BRIDGE_UI_DIR`) is treated as
+protected. The path is classified by the union of the RAW form with the
+normalized one, and any `%2F`, `%5C`, or `\` in the path is **400** before
+any decision — an encoded separator doesn't exist in any legitimate
+client. A request-target that doesn't start with `/` (absolute form,
+`CONNECT`, `OPTIONS *`) is **400** before classification: that's where auth
+was breached in the re-review. `Origin` outside loopback is refused, and
+`/hooks/*` always requires the token.
 
-**Ids por regex.** `sessionId`, evento de hook, `resume` e nomes de ref passam
-por regex estrita na entrada (`^[A-Za-z0-9_-]{1,64}$` para ids,
-`^[A-Za-z]{1,40}$` para eventos, forma de ref para branch/base) — nada que
-comece com `-` chega a virar argumento de processo, e nada com `..` ou barra
-chega a virar caminho de arquivo. O **nome da distro** do ambiente de WSL
-(0.11.0) entra na mesma disciplina: `isValidDistro` recusa nome vazio, com
-caractere de controle ou começando com `-` **antes** de ele virar argumento de
-`wsl.exe -d <distro>`. O argv vai separado (nenhuma execução nova passa por
-shell), então o que se evita ali não é injeção de comando, e sim injeção de
-ARGUMENTO no parser do próprio `wsl.exe` — o mesmo motivo do `--resume`.
+**Ids by regex.** `sessionId`, hook event, `resume`, and ref names go
+through strict input regex (`^[A-Za-z0-9_-]{1,64}$` for ids,
+`^[A-Za-z]{1,40}$` for events, ref form for branch/base) — nothing starting
+with `-` gets to become a process argument, and nothing with `..` or a
+slash gets to become a file path. The **distro name** of the WSL
+environment (0.11.0) follows the same discipline: `isValidDistro` rejects
+an empty name, one with a control character, or one starting with `-`
+**before** it becomes an argument to `wsl.exe -d <distro>`. The argv is
+passed separately (no new execution goes through a shell), so what's
+avoided there isn't command injection, but ARGUMENT injection into
+`wsl.exe`'s own parser — the same reason behind `--resume`.
 
-**Contenção do git e modelo de confiança nos filtros (A3).** Todo comando git
-roda com `-c core.fsmonitor=false -c core.useBuiltinFSMonitor=false
--c core.pager=cat`; as leituras **passivas** (o poller da sidebar, a detecção de
-repo) rodam ainda com `core.hooksPath` apontando pra uma pasta vazia do perfil,
-com `--ignore-submodules=all`, e com `--` antes de qualquer ref. Os drivers de
-`filter.*` **não** são neutralizados — desligá-los quebraria `git-crypt`,
-`nbstripout` e `git-lfs` —, são **detectados**: repositório que declara um
-driver e ainda não foi confiado não recebe comando que toque conteúdo, a
-sidebar mostra **⚠ filtros**, e "Nova tarefa", "Mesclar" e "Remover worktree"
-respondem **409 `filters-untrusted`** até você confiar pelo menu do workspace.
-A detecção enumera os escopos `--local` e `--worktree` (com `--includes`), na
-raiz e em **cada worktree**, e desce nos submódulos — pelos caminhos do
-`.gitmodules` (lido com `-z`, então nome com espaço não engana o parser) **e**
-pelos gitlinks do índice, com contenção **dupla** de caminho: o declarado
-(`path` vazio, absoluto ou com `..` não é seguido) e o **real** — a pasta do
-submódulo e o gitdir que o git resolve pra ela (`rev-parse --absolute-git-dir`)
-têm que ficar sob o `realpath` do repositório, o que fecha a junction e o `.git`
-que é um arquivo `gitdir: <caminho de fora>`. Falha de enumeração conta como
-"tem driver" (fail-closed). Detalhes de uso no README, seção "Filtros git e
-confiança".
+**Git containment and trust model for filters (A3).** Every git command
+runs with `-c core.fsmonitor=false -c core.useBuiltinFSMonitor=false
+-c core.pager=cat`; **passive** reads (the sidebar poller, repo detection)
+also run with `core.hooksPath` pointing at an empty folder in the profile,
+with `--ignore-submodules=all`, and with `--` before any ref. `filter.*`
+drivers are **not** neutralized — disabling them would break `git-crypt`,
+`nbstripout`, and `git-lfs` — they're **detected**: a repository that
+declares a driver and hasn't been trusted yet doesn't receive a command
+that touches content, the sidebar shows **⚠ filters**, and "New task",
+"Merge", and "Remove worktree" respond **409 `filters-untrusted`** until
+you trust it from the workspace menu. Detection enumerates the `--local`
+and `--worktree` scopes (with `--includes`), at the root and in **every
+worktree**, and descends into submodules — via the `.gitmodules` paths
+(read with `-z`, so a name with a space doesn't fool the parser) **and**
+via the index gitlinks, with **double** path containment: the declared one
+(`path` empty, absolute, or with `..` is not followed) and the **real**
+one — the submodule's folder and the gitdir git resolves it to
+(`rev-parse --absolute-git-dir`) both have to sit under the repository's
+`realpath`, which closes off the junction and the `.git` that's a file
+`gitdir: <path outside>`. An enumeration failure counts as "has a driver"
+(fail-closed). Usage details are in the README, "Git filters and trust"
+section.
 
-**Guarda de escopo entre worktrees (A3).** O `cwd` de um processo é uma
-sugestão, não uma cerca: o agente da tarefa A podia abrir e reescrever um
-arquivo do worktree irmão com um caminho absoluto, e ninguém ficava sabendo. O
-`PreToolUse` é o único hook do Claude Code que aceita decisão de permissão na
-resposta, e é ali que o Bridge julga: `Read`, `Edit`, `Write`, `MultiEdit`,
-`NotebookEdit`, `Glob`, `Grep` e `LS` têm o `file_path`/`notebook_path`/`path`
-resolvido contra o `cwd` **da sessão** (com `.`, `..`, barras misturadas e
-symlink/junction desfeitos por `realpath`) e comparado com a raiz permitida — o
-worktree, num workspace de tarefa; o repositório inteiro, num workspace de repo;
-o `cwd`, fora de repositório. Fora dela, a resposta é
-`permissionDecision: "deny"` com a razão em pt-BR, e a sessão ganha um contador
-com os cinco últimos caminhos (todos por `sanitizeDisplay`, como todo texto que
-vem de fora e vai pra tela). UNC e o namespace de dispositivo (`\\?\`, `\\.\`)
-são recusados sem comparação, e caminho irresolvível conta como fora
-(**fail-closed**). Raiz que sumiu do disco desliga a guarda daquela sessão em
-vez de barrar tudo. E a liberação por workspace (`crossAccess`) é **total**,
-não "acesso ao worktree irmão": ligada, as sessões daquele workspace voltam a
-poder ler e escrever em qualquer lugar do disco, como em qualquer versão
-anterior à 0.11.0.
+**Scope guard between worktrees (A3).** A process's `cwd` is a suggestion,
+not a fence: task A's agent could open and rewrite a file in the sibling
+worktree with an absolute path, and no one would know. `PreToolUse` is the
+only Claude Code hook that accepts a permission decision in its response,
+and that's where Bridge judges: `Read`, `Edit`, `Write`, `MultiEdit`,
+`NotebookEdit`, `Glob`, `Grep`, and `LS` have their
+`file_path`/`notebook_path`/`path` resolved against the **session's**
+`cwd` (with `.`, `..`, mixed slashes, and symlink/junction undone via
+`realpath`) and compared against the allowed root — the worktree, in a
+task workspace; the whole repository, in a repo workspace; the `cwd`,
+outside a repository. Outside it, the response is
+`permissionDecision: "deny"` with the reason in English (or the user's
+chosen UI language), and the session gets a counter with the last five
+paths (all through `sanitizeDisplay`, like any text that comes from
+outside and goes to the screen). UNC and the device namespace (`\\?\`,
+`\\.\`) are rejected without comparison, and an unresolvable path counts
+as outside (**fail-closed**). A root that vanished from disk turns off the
+guard for that session instead of blocking everything. And releasing it
+per workspace (`crossAccess`) is **total**, not "access to the sibling
+worktree": once on, that workspace's sessions can once again read and
+write anywhere on disk, like in any version before 0.11.0.
 
-**Contra quem ela existe, e contra quem NÃO existe.** Ela é uma proteção contra
-**erro do agente** e contra **conteúdo de repositório hostil** (A3) — um
-`CLAUDE.md`, um README ou um comentário de código que instrua o agente a "ler o
-arquivo `X` da pasta do lado". Ela **não** é uma barreira contra o dono da
-máquina nem contra outro processo dele (A2): quem controla o terminal desliga a
-guarda em Configurações → Sessões, libera o workspace pelo menu "⋯"
-(`PATCH /api/workspaces/:id { crossAccess: true }`), edita o `config.json` ou
-simplesmente roda `git` na mão — e isso é o item 1 dos riscos aceitos, não um
-furo. A guarda vale exatamente enquanto o dono quiser que valha, e o botão de
-desligar é dele, à vista, no menu.
+**Who it exists against, and who it does NOT.** It's a protection against
+**agent error** and against **hostile repository content** (A3) — a
+`CLAUDE.md`, a README, or a code comment instructing the agent to "read
+file `X` from the folder next door." It's **not** a barrier against the
+machine's owner or against another process of theirs (A2): whoever
+controls the terminal turns off the guard in Settings → Sessions, releases
+the workspace from the "⋯" menu
+(`PATCH /api/workspaces/:id { crossAccess: true }`), edits `config.json`,
+or simply runs `git` by hand — and that's accepted risk item 1, not a
+hole. The guard holds for exactly as long as the owner wants it to, and
+the off switch is theirs, in plain sight, in the menu.
 
-**O wrapper `claude` de cada shell (0.12.0).** Toda sessão de shell nasce com
-uma pasta `bin` dentro da pasta DA SESSÃO, no perfil
-(`%APPDATA%\bridge\sessions\<id>\bin`), e essa pasta entra na frente do `PATH`
-**só do PTY daquela sessão** — nada é escrito fora do perfil, nenhuma variável
-de ambiente do usuário ou da máquina é tocada, e o `PATH` do Windows continua
-como estava para todo processo que não nasceu dentro de um painel do Bridge. É a
-mesma pasta de perfil que guarda o `instance.json` — com a ressalva de que a ACL
-descrita abaixo é aplicada ao ARQUIVO do token, e não à pasta: o que protege o
-resto do perfil é a permissão padrão do perfil do usuário no Windows, e o modelo
-continua sendo "mesmo usuário = mesma confiança". **A3 não alcança isso**: um
-repositório hostil escreve no repositório, não no perfil — e nada do conteúdo do
-wrapper vem do repo. O alvo sai do `where.exe` do processo do core; o
-`claude.cmd` não cita caminho literal nenhum (o alvo vem do ambiente e o
-settings do `%~dp0`), e os wrappers de shell POSIX citam os dois caminhos com o
-mesmo `shQuote` (aspas simples) do resto do core. O `settings.json` que o
-wrapper passa é o MESMO das sessões de agente, com os mesmos hooks apontando
-pro shim.
+**The per-shell `claude` wrapper (0.12.0).** Every shell session is born
+with a `bin` folder inside the SESSION's own folder, in the profile
+(`%APPDATA%\bridge\sessions\<id>\bin`), and that folder is prepended to
+the `PATH` **only of that session's PTY** — nothing is written outside the
+profile, no user or machine environment variable is touched, and the
+Windows `PATH` stays as it was for any process not born inside a Bridge
+panel. It's the same profile folder that holds `instance.json` — with the
+caveat that the ACL described below is applied to the token FILE, not the
+folder: what protects the rest of the profile is the Windows user
+profile's default permission, and the model remains "same user = same
+trust." **A3 doesn't reach this**: a hostile repository writes to the
+repository, not to the profile — and none of the wrapper's content comes
+from the repo. The target comes from the core process's `where.exe`; the
+`claude.cmd` doesn't cite any literal path (the target comes from the
+environment, and the settings from `%~dp0`), and the POSIX shell wrappers
+quote both paths with the same `shQuote` (single quotes) as the rest of
+the core. The `settings.json` the wrapper passes is the SAME one used by
+agent sessions, with the same hooks pointing at the shim.
 
-O alvo do wrapper viaja no ambiente da sessão (`BRIDGE_CLAUDE_BIN`, uma decisão
-de codepage: o cmd.exe lê arquivo de lote em OEM e um caminho com acento
-gravado ali chega corrompido). Isso quer dizer, dito em voz alta: **qualquer
-processo rodando DENTRO daquele shell pode reapontar as chamadas seguintes de
-`claude` daquela sessão** — trocando a variável, ou pondo outro `claude` mais à
-frente no `PATH`. Isso está **fora** de A2/A3 pelo mesmo motivo do risco 1:
-quem já executa código dentro do seu terminal, com a sua conta, não precisa do
-Bridge pra fazer isso — ele digitaria o caminho que quisesse. O que o Bridge
-garante é o estado INICIAL do shell que ele abriu.
+The wrapper's target travels in the session environment
+(`BRIDGE_CLAUDE_BIN`, a codepage decision: cmd.exe reads a batch file in
+OEM, and a path with an accented character written there arrives
+corrupted). Said out loud, this means: **any process running INSIDE that
+shell can redirect that session's subsequent `claude` calls** — by
+changing the variable, or by putting another `claude` earlier in the
+`PATH`. This is **outside** A2/A3 for the same reason as risk 1: whoever
+already executes code inside your terminal, under your account, doesn't
+need Bridge to do this — they'd just type whatever path they wanted. What
+Bridge guarantees is the INITIAL state of the shell it opened.
 
-**A promoção por hook (0.12.0).** Desde esta versão, **qualquer POST
-autenticado em `/hooks/<sid de uma sessão de shell>/<Evento>` promove aquele
-painel a hospedeiro** — a linha passa a dizer `claude`, a sessão passa a contar
-no teto de agentes e os hooks seguintes atravessam o adaptador do Claude. É a
-MESMA confiança que a rota de hooks já dava às sessões de agente (o token do
-`instance.json`, A2), mas a **superfície é maior**: antes só sessões de agente
-respondiam a ela, agora todo painel de shell também. Quem consegue chamar já
-tem o token, e com o token já podia criar sessão, matar sessão e ler estado —
-o dano de uma promoção falsa é uma linha da sidebar dizendo `claude` e um slot
-do escalonador ocupado até o shell fechar.
+**Promotion via hook (0.12.0).** Since this version, **any authenticated
+POST to `/hooks/<sid of a shell session>/<Event>` promotes that panel to
+host** — the row starts saying `claude`, the session starts counting
+toward the agent cap, and subsequent hooks go through the Claude adapter.
+It's the SAME trust the hooks route already granted to agent sessions (the
+`instance.json` token, A2), but the **surface is larger**: before, only
+agent sessions responded to it; now every shell panel does too. Whoever
+can call it already has the token, and with the token could already
+create a session, kill a session, and read state — the damage from a fake
+promotion is a sidebar row saying `claude` and a scheduler slot occupied
+until the shell closes.
 
-**O `cwd` do payload de hook não alarga a cerca (A4).** Com a guarda de escopo
-valendo também para a sessão hospedeira, o `PreToolUse` passou a resolver
-caminho RELATIVO contra o `cwd` que vem no payload (a pessoa pode ter dado `cd`
-antes de abrir o Claude ali dentro), e não mais só contra o `cwd` da sessão. A
-**raiz permitida continua vindo exclusivamente do workspace** — o payload
-escolhe de onde o relativo parte, nunca até onde ele pode chegar, então um `cwd`
-mentiroso só faz o caminho apontar pra outro lugar, e apontando pra fora da raiz
-é recusa como qualquer outro. Só `cwd` absoluto é aceito. Um caminho absoluto
-SEM letra de unidade (`/foo`, que é o que uma sessão em WSL escreveria) herda a
-unidade do processo do core na resolução do `win32` — o pior caso disso é uma
-recusa indevida, nunca uma fuga: a comparação continua sendo contra a raiz do
-workspace.
+**The hook payload's `cwd` doesn't widen the fence (A4).** With the scope
+guard now also applying to the host session, `PreToolUse` started
+resolving a RELATIVE path against the `cwd` that comes in the payload (the
+person may have `cd`'d before opening Claude in there), and no longer only
+against the session's `cwd`. The **allowed root still comes exclusively
+from the workspace** — the payload chooses where the relative path starts
+from, never how far it can reach, so a lying `cwd` only makes the path
+point somewhere else, and pointing outside the root is refused like any
+other. Only an absolute `cwd` is accepted. An absolute path WITHOUT a
+drive letter (`/foo`, which is what a WSL session would write) inherits
+the core process's drive in `win32` resolution — the worst case of that is
+a wrongful refusal, never an escape: the comparison is still against the
+workspace's root.
 
-**ACL do `instance.json`.** No Windows, `mode: 0o600` é no-op — não gera ACE
-nenhuma. Depois de gravar o arquivo que carrega o token, o core roda
-`icacls <arquivo> /inheritance:r /grant:r "<DOMÍNIO\usuário>:(R,W)"`. Se isso
-falhar (política de grupo, `icacls` fora do PATH), o core **sobe assim mesmo** —
-derrubar o app por causa disso seria pior — mas a falha vira `error` no log,
-o campo `instanceAclApplied: false` no estado, e um **banner persistente** na
-UI: "Não consegui restringir a permissão do instance.json — outro usuário desta
-máquina pode ler o token". O banner só some quando um core seguinte consegue
-aplicar a ACL (ou quando você o fecha).
+**`instance.json` ACL.** On Windows, `mode: 0o600` is a no-op — it
+generates no ACE at all. After writing the file that carries the token,
+the core runs
+`icacls <file> /inheritance:r /grant:r "<DOMAIN\user>:(R,W)"`. If this
+fails (group policy, `icacls` missing from PATH), the core **still starts
+up** — crashing the app over this would be worse — but the failure becomes
+an `error` in the log, the `instanceAclApplied: false` field in state, and
+a **persistent banner** in the UI: "Couldn't restrict instance.json's
+permission — another user on this machine may be able to read the token."
+The banner only disappears once a later core manages to apply the ACL (or
+when you dismiss it).
 
-**Limites (DoS).** Corpo de requisição em 1 MiB (Fastify); WS com `maxPayload`
-de 1 MiB e no máximo 32 conexões; `resize` entre 1 e 1000 linhas/colunas; texto
-de notificação em 2000 caracteres, com limite de 10 notificações por segundo por
-sessão e poda periódica do banco (que também alcança as **não lidas** antigas —
-uma sessão que despeja OSC e nunca é lida não cresce pra sempre); scrollback com
-teto de 512 KB por sessão; leitura de transcript só na cauda (1 MB), recusando
-caminho relativo, UNC e arquivo acima de 64 MB.
+**Limits (DoS).** Request body at 1 MiB (Fastify); WS with a `maxPayload`
+of 1 MiB and at most 32 connections; `resize` between 1 and 1000
+rows/columns; notification text at 2000 characters, with a limit of 10
+notifications per second per session and periodic pruning of the database
+(which also reaches old **unread** ones — a session that dumps OSC and is
+never read doesn't grow forever); scrollback capped at 512 KB per session;
+transcript reading only at the tail (1 MB), refusing a relative path, UNC,
+and a file above 64 MB.
 
-**UI e toast (A1).** Nada de `dangerouslySetInnerHTML`/`innerHTML` em lugar
-nenhum; o texto que vem do terminal é filho de nó React. O toast nativo trunca
-título e corpo (200/1000). A UI sai com `Content-Security-Policy`
-(`script-src 'self'`, sem `unsafe-inline` e sem `eval`; `object-src`,
-`frame-ancestors`, `base-uri` e `form-action` em `'none'`),
-`X-Content-Type-Options: nosniff` e `Referrer-Policy: no-referrer`.
+**UI and toast (A1).** No `dangerouslySetInnerHTML`/`innerHTML` anywhere;
+text coming from the terminal is a React node child. The native toast
+truncates title and body (200/1000). The UI ships with
+`Content-Security-Policy` (`script-src 'self'`, no `unsafe-inline` and no
+`eval`; `object-src`, `frame-ancestors`, `base-uri`, and `form-action` set
+to `'none'`), `X-Content-Type-Options: nosniff`, and
+`Referrer-Policy: no-referrer`.
 
-**Transcrições: lidas para CONTAR, nunca guardadas (0.10.0).** O monitor de uso
-(ADR-012) lê os `*.jsonl` que o Claude Code grava em
-`<claudeHome>\projects\**` pra somar tokens. Três garantias, nesta ordem:
+**Transcripts: read to COUNT, never stored (0.10.0).** The usage monitor
+(ADR-012) reads the `*.jsonl` files Claude Code writes to
+`<claudeHome>\projects\**` to add up tokens. Three guarantees, in this
+order:
 
-- **o que sai da leitura são números.** O parser devolve as quatro contagens de
-  token, o id do modelo, o `cwd` da linha e o carimbo de tempo. Texto de
-  mensagem, nome de arquivo citado, saída de ferramenta — nada disso é
-  extraído, e portanto nada disso pode ser gravado. As tabelas do banco
-  (`usage_daily`, `usage_files`, `usage_limits`) não têm coluna de conteúdo;
-- **nada sai da máquina.** O core continua escutando só em `127.0.0.1`, e o
-  monitor não fala com rede nenhuma: os preços são uma tabela EMBUTIDA no
-  pacote, não uma consulta;
-- **você escolhe a pasta.** A raiz é `BRIDGE_CLAUDE_HOME` →
-  `CLAUDE_CONFIG_DIR` → `~/.claude`, nessa ordem. A variável existe pros testes
-  e pro e2e (nenhum teste do repositório lê o `~/.claude` de quem roda a
-  suíte) e serve pra apontar o monitor pra outro lugar — ou pra uma pasta
-  vazia, se você não quiser que ele leia nada. `claudeHome` aparece em
-  `GET /api/config` como **somente leitura**: mudá-lo por API mudaria o que o
-  app lê do disco a partir de um pedido HTTP, e essa decisão fica no ambiente.
+- **what comes out of the read are numbers.** The parser returns the four
+  token counts, the model id, the line's `cwd`, and the timestamp. Message
+  text, a cited file name, tool output — none of that is extracted, and so
+  none of it can be stored. The database tables (`usage_daily`,
+  `usage_files`, `usage_limits`) have no content column;
+- **nothing leaves the machine.** The core keeps listening only on
+  `127.0.0.1`, and the monitor doesn't talk to any network: prices are a
+  table BUILT INTO the package, not a lookup;
+- **you choose the folder.** The root is `BRIDGE_CLAUDE_HOME` →
+  `CLAUDE_CONFIG_DIR` → `~/.claude`, in that order. The variable exists
+  for tests and for e2e (no test in the repository reads the `~/.claude`
+  of whoever runs the suite) and it's there to point the monitor
+  elsewhere — or at an empty folder, if you don't want it reading
+  anything. `claudeHome` shows up in `GET /api/config` as **read-only**:
+  changing it via API would change what the app reads from disk based on
+  an HTTP request, and that decision stays in the environment.
 
-O que o monitor NÃO protege: ele lê a pasta que a variável aponta, inteira e
-recursivamente (até 8 níveis, sem seguir link simbólico — no Windows a junction
-de `mklink /J` também é pulada). Se você apontar `BRIDGE_CLAUDE_HOME` pra uma
-pasta com `*.jsonl` de outra coisa, ele vai abrir esses arquivos pra procurar
-linhas de assistente. Continua valendo o item 1 dos riscos aceitos: quem já
-roda código com a sua conta já podia ler tudo isso.
+What the monitor does NOT protect: it reads the folder the variable
+points to, entirely and recursively (up to 8 levels, without following a
+symbolic link — on Windows a `mklink /J` junction is also skipped). If you
+point `BRIDGE_CLAUDE_HOME` at a folder with `*.jsonl` files from something
+else, it'll open those files looking for assistant lines. Accepted risk
+item 1 still applies: whoever already runs code under your account could
+already read all of that.
 
-**Transcrição hostil (A6), 0.10.1.** O que o monitor faz com um `.jsonl` que
-não veio do Claude Code:
+**Hostile transcript (A6), 0.10.1.** What the monitor does with a
+`.jsonl` that didn't come from Claude Code:
 
-- **linha maior que 4 MiB é PULADA**, contada e avisada uma vez por arquivo. O
-  offset SEMPRE avança: antes disso, uma linha maior que a fatia de leitura
-  travava aquele arquivo para sempre e sumia, em silêncio, com todo o consumo
-  depois dela. E a contagem não fica só no log: quando alguma linha é pulada —
-  ou quando a árvore passa do teto de arquivos — o painel "Uso", o
-  **Configurações → Uso** e o `bridge usage` escrevem quantas foram e dizem que
-  o número mostrado é MENOR que o consumo real;
-- **contador de token fora de `[0, 1e12]` conta zero**, e carimbo de tempo fora
-  de `[2020-01-01, hoje + 2 dias]` descarta a linha — números de payload não
-  entram no banco pelo tamanho que vierem;
-- **nome de modelo é consultado com `Object.hasOwn` numa tabela sem protótipo**:
-  um `model: "constructor"` não "acha preço" na cadeia de `Object.prototype`
-  nem transforma o custo do recorte inteiro em `NaN`;
-- **a listagem da árvore é assíncrona**, cede o event loop a cada 500 entradas
-  ou 5 ms, e para em 50 000 arquivos com aviso. Numa árvore de 20 000 arquivos
-  a maior pausa medida é de 3 a 8 ms, contra os 3,78 s da versão síncrona;
-- **todo texto que veio de fora e vai pra TELA passa por um sanitizador só**
-  (`sanitizeDisplay`, em `@bridge/shared`): a statusline devolvida ao terminal,
-  o `bridge usage`, e os `title`/`aria-label` do painel. Ele remove sequência
-  de escape (OSC, CSI, ESC solto), C0/C1, DEL **e os caracteres de formato
-  invisíveis do Trojan Source** (`U+202E` e o resto dos bidi, os de largura
-  zero, o BOM) — um `cwd` com RLO renderiza um caminho que não é o caminho —,
-  colapsa espaço e corta no teto do campo. O `--json` da CLI e o corpo da API
-  continuam CRUS de propósito: são dado, não tela;
-- **o payload da statusline tem tetos**: no máximo 16 janelas de `rate_limits`,
-  chave de janela em 64 caracteres, `resets_at` só dentro de ±10 anos.
+- **a line bigger than 4 MiB is SKIPPED**, counted, and warned about once
+  per file. The offset ALWAYS advances: before this, a line bigger than
+  the read chunk would lock up that file forever and silently vanish,
+  along with all consumption after it. And the count doesn't stay only in
+  the log: when some line gets skipped — or when the tree exceeds the file
+  cap — the "Usage" panel, **Settings → Usage**, and `bridge usage` write
+  how many there were and say the number shown is LOWER than actual
+  consumption;
+- **a token count outside `[0, 1e12]` counts as zero**, and a timestamp
+  outside `[2020-01-01, today + 2 days]` discards the line — numbers from
+  the payload don't enter the database no matter their size;
+- **model name is looked up with `Object.hasOwn` on a table with no
+  prototype**: a `model: "constructor"` doesn't "find a price" up the
+  `Object.prototype` chain nor turn the cost of the whole slice into
+  `NaN`;
+- **the tree listing is asynchronous**, yields the event loop every 500
+  entries or 5 ms, and stops at 50,000 files with a warning. On a
+  20,000-file tree the largest measured pause is 3 to 8 ms, versus the
+  3.78 s of the synchronous version;
+- **all text that came from outside and goes to the SCREEN goes through a
+  single sanitizer** (`sanitizeDisplay`, in `@bridge/shared`): the
+  statusline returned to the terminal, `bridge usage`, and the panel's
+  `title`/`aria-label`. It strips escape sequences (OSC, CSI, loose ESC),
+  C0/C1, DEL, **and the invisible Trojan Source format characters**
+  (`U+202E` and the rest of the bidi ones, the zero-width ones, the BOM) —
+  a `cwd` with an RLO renders a path that isn't the path —, collapses
+  whitespace, and truncates at the field cap. The CLI's `--json` and the
+  API body stay RAW on purpose: they're data, not screen;
+- **the statusline payload has caps**: at most 16 `rate_limits` windows,
+  window key at 64 characters, `resets_at` only within ±10 years.
 
-**O recap é o segundo consumidor de transcrição hostil (0.11.0).** O monitor de
-uso lê o `.jsonl` pra CONTAR; o `recap.ts` lê o mesmo tipo de arquivo pra
-extrair TEXTO, e o texto extraído acaba sendo digitado no PTY do agente
-restaurado. Duas travas seguram isso:
+**The recap is the second consumer of hostile transcripts (0.11.0).** The
+usage monitor reads `.jsonl` to COUNT; `recap.ts` reads the same kind of
+file to extract TEXT, and the extracted text ends up typed into the
+restored agent's PTY. Two locks hold this down:
 
-- **o caminho é conferido contra a raiz de `projects/` mesmo quando o id vem do
-  SQLite** (`recap.ts:106` no caminho direto, `recap.ts:117` na varredura de
-  pastas): o `agentSessionId` já passou pelo `AGENT_SESSION_ID` do hook antes de
-  ser gravado, mas um banco adulterado não pode virar leitura de arquivo
-  arbitrário — é a mesma disciplina do dump de hooks;
-- **o texto sai em UMA linha, por `sanitizeDisplay`** — por trecho
-  (`recap.ts:185`) e de novo no resumo já montado (`recap.ts:222`). É isso que
-  impede o ataque específico deste consumidor: um `\n` injetado numa mensagem da
-  transcrição viraria um **Enter** no prompt do agente, ou seja, a transcrição
-  escolhendo o que o Claude Code executa ao ser retomado. Sem quebra de linha
-  não há submissão — sobra texto que o dono lê antes de mandar.
+- **the path is checked against the `projects/` root even when the id
+  comes from SQLite** (`recap.ts:106` on the direct path, `recap.ts:117`
+  in the folder sweep): the `agentSessionId` already went through the
+  hook's `AGENT_SESSION_ID` before being stored, but a tampered database
+  can't turn into an arbitrary file read — it's the same discipline as
+  the hooks dump;
+- **the text comes out on ONE line, via `sanitizeDisplay`** — per snippet
+  (`recap.ts:185`) and again on the already-assembled summary
+  (`recap.ts:222`). That's what stops this consumer's specific attack: a
+  `\n` injected into a transcript message would become an **Enter** in
+  the agent's prompt, i.e., the transcript choosing what Claude Code runs
+  when resumed. Without a line break there's no submission — what's left
+  is text the owner reads before sending.
 
-**O que o monitor GUARDA de você (privacidade).** Além de "nada de conteúdo de
-mensagem", vale dizer o que É gravado, porque caminho de projeto é dado pessoal
-(nome de cliente, nome de produto que ainda não foi anunciado):
+**What the monitor STORES about you (privacy).** Besides "no message
+content," it's worth stating what IS stored, because a project path is
+personal data (client name, product name not yet announced):
 
-- `usage_daily.project` guarda o `cwd` de cada linha de transcrição;
-- `usage_files.path` guarda o caminho absoluto de cada `.jsonl` já lido;
-- os dois ficam em `%APPDATA%\bridge\bridge.db`, e caminhos de
-  transcrição também aparecem em avisos no `%APPDATA%\bridge\logs\core.log`.
+- `usage_daily.project` stores the `cwd` of each transcript line;
+- `usage_files.path` stores the absolute path of every `.jsonl` already
+  read;
+- both live in `%APPDATA%\bridge\bridge.db`, and transcript paths also
+  show up in warnings in `%APPDATA%\bridge\logs\core.log`.
 
-Nada disso sai da máquina. Para apagar: esvazie (ou aponte pra outro lugar) a
-pasta de transcrições e clique em **Reler transcrições** (`POST
-/api/usage/rescan`), ou simplesmente apague o `bridge.db` — ele é derivado, e o
-Bridge o reconstrói.
+None of this leaves the machine. To erase it: empty (or point elsewhere)
+the transcripts folder and click **Rescan transcripts** (`POST
+/api/usage/rescan`), or simply delete `bridge.db` — it's derived, and
+Bridge rebuilds it.
 
-**Instalador (A5).** O caminho de instalação escolhido pelo usuário deixou de
-ser interpolado cru na linha do PowerShell: a aspa simples é dobrada antes
-(`WordReplace` no `installer.nsh`), e a regra vive como função pura testada.
+**Installer (A5).** The install path chosen by the user is no longer
+interpolated raw into the PowerShell line: the single quote is doubled
+beforehand (`WordReplace` in `installer.nsh`), and the rule lives as a
+pure, tested function.
 
-**Dependências.** `npm audit --omit=dev` e completo: **0 vulnerabilidades** na
-0.8.0 (`@fastify/static` foi de 8.3.0 para 10.1.3, fechando quatro advisories,
-um deles Alto).
+**Dependencies.** `npm audit --omit=dev` and full: **0 vulnerabilities**
+in 0.8.0 (`@fastify/static` went from 8.3.0 to 10.1.3, closing four
+advisories, one of them High).
 
-## Riscos aceitos (e por quê)
+## Accepted risks (and why)
 
-Nenhum destes é desconhecido: cada um foi medido, discutido e deixado de pé com
-motivo. Se algum deles for inaceitável pro seu uso, o Bridge não é a ferramenta.
+None of these is unknown: each was measured, discussed, and left standing
+with a reason. If any of them is unacceptable for your use, Bridge isn't
+the tool.
 
-1. **Qualquer processo seu manda no Bridge.** O `instance.json` é legível pela
-   sua conta, e com ele vem o token. É o mesmo modelo do Claude Code, e é a
-   consequência direta de "mesmo usuário = mesma confiança". Não há defesa
-   possível que não seja teatro.
-2. **Driver de filtro na config GLOBAL ou de SISTEMA.** A detecção enumera só o
-   que é do repositório (`--local`, `--worktree` e os submódulos). Um driver no
-   seu `~/.gitconfig` não aparece — e nem deveria: aquilo é você configurando a
-   sua máquina, não um repositório trazendo comando de fora.
-3. **`--ignore-submodules=all` esconde sujeira de submódulo.** Foi o preço de
-   impedir que o `status` do superprojeto descesse no submódulo (onde pode
-   haver driver invisível): **submódulo com alteração não commitada deixa de
-   contar no `~M`** da sidebar.
-4. **Leitura de `*.jsonl` arbitrário pelo `transcript_path`.** (Este é o hook;
-   a varredura do monitor de uso é outra coisa e está descrita acima.) O payload de
-   hook (A4) escolhe qual transcript ler; o Bridge exige caminho absoluto com
-   letra de unidade, extensão `.jsonl`, arquivo abaixo de 64 MB, e lê só o
-   último 1 MB. Ainda assim é um arquivo escolhido por quem chamou o hook —
-   quem chama o hook é o agente que **você** abriu, com a **sua** conta.
-5. **Token no query string do `/ws` e do shim.** Trocar por header mudaria o
-   contrato de UI, shell, CLI e shim de uma vez. A auditoria mediu que o token
-   não vaza: o Fastify sobe com `logger: false`, nenhuma chamada de log carrega
-   URL ou token, e o canal é loopback sem proxy.
-6. **`LOOPBACK_ORIGIN` aceita qualquer porta de loopback.** Uma página servida
-   por você mesmo em `http://127.0.0.1:<outra porta>` passa no teste de origem —
-   mas continua precisando do **token**, que ela não tem. A regex é ancorada
-   (`http://localhost.evil.com` é recusado).
-7. **Token no `localStorage` no modo web de desenvolvimento.** No Electron —
-   que é o produto — o token vem pelo `preload` e nunca toca `localStorage` nem
-   a URL. Vale só pra quem roda a UI no Vite à mão.
-8. **Fuses do Electron ainda não aplicados.** `RunAsNode`,
-   `EnableNodeCliInspectArguments`, `EnableEmbeddedAsarIntegrityValidation` e
-   `OnlyLoadAppFromAsar` exigem o pacote `@electron/fuses`, que não está no
-   lockfile — e a fase de segurança rodou sob a regra de **não** instalar
-   dependência nova. Está registrado no backlog interno do dono, aguardando autorização. Sem os
-   fuses, quem já pode rodar programa com a sua conta pode usar o `Bridge.exe`
-   como um Node genérico (`ELECTRON_RUN_AS_NODE`) — o que, de novo, é o item 1.
-9. **Sem rate limit genérico de rota.** `POST /api/tasks` em laço cria
-    worktrees até o disco acabar. Quem consegue chamar já tem o token (A2). O
-    único caminho **sem** token (notificação por OSC, A1) tem limite próprio.
-    A exceção é `POST /api/usage/rescan`, que ganhou limite próprio na 0.10.1
-    (**409** com uma releitura em voo, **429** dentro de 30 s da última): o
-    custo dele é proporcional ao seu HISTÓRICO inteiro, não ao pedido. Desde a
-    0.11.0 a fila do escalonador tem teto próprio: `POST /api/sessions` de
-    agente acumula no máximo **64** pendentes e responde **429
-    `queue-full`** depois disso — a fila é de memória, e crescer sem teto seria
-    trocar o custo de subir agentes pelo custo de guardá-los.
-10. **Hooks do git rodam nas ações que você pede.** `worktree add` e `merge`
-    executam os hooks do repositório — é o comportamento contratado do git, e
-    desligá-los quebraria o fluxo de quem tem hook legítimo. O caminho
-    **passivo** (o poller, que roda sozinho a cada 15 s) é que foi fechado.
-11. **`bridge usage --json` mostra os seus caminhos de projeto.** É JSON, é
-    local, e quem roda o comando é você. O caminho HUMANO do mesmo comando sai
-    sanitizado e cortado; o `--json` sai cru porque é o corpo da rota.
-12. **`usage.pricingFile` lê um arquivo que VOCÊ apontou.** Desde a 0.10.1 ele
-    exige `.json`, arquivo regular e no máximo 1 MiB, e qualquer falha vira um
-    aviso genérico — sem trecho do conteúdo, sem nome de chave e sem o caminho,
-    em lugar nenhum (resposta, tela ou log). O que sobra é o que você mesmo
-    configurou.
-13. **Contagem menor que a real numa transcrição fora do padrão.** Linha maior
-    que 4 MiB é pulada de propósito (a alternativa era travar a leitura daquele
-    arquivo para sempre). O painel, o `bridge usage` e o **Configurações → Uso**
-    dizem quantas foram, e o `core.log` diz de qual arquivo — mas o consumo
-    daquelas linhas não é recuperado.
-14. **O aviso do `pricingFile` conta as entradas inválidas.** Ele diz "N
-    entradas ignoradas" e nunca o nome delas, justamente pra não virar um
-    oráculo das chaves do arquivo apontado — mas a CONTAGEM ainda é um bit de
-    informação sobre um arquivo que você escolheu. É o preço de avisar que a
-    sua tabela de preços tem erro.
-15. **O teto do `pricingFile` é verificado antes da leitura (`stat` → `read`).**
-    Entre as duas chamadas o arquivo pode ser trocado por outro; quem consegue
-    fazer isso já roda código com a sua conta (item 1). O que a trava fecha é o
-    caminho acidental e o alvo escolhido pelo payload, não uma corrida de quem
-    já está dentro.
-16. **O teto de 50 000 arquivos corta por ordem de caminhada, não por data.**
-    Numa árvore acima do teto, o que fica de fora é o fim da varredura
-    alfabética, e não o mais antigo. O painel avisa que a lista foi cortada; a
-    saída é apontar `BRIDGE_CLAUDE_HOME` pra uma árvore menor.
-17. **A guarda de escopo não cobre o `Bash`.** Um comando de shell não declara
-    caminho — declara texto, e o alvo depende do `cwd`, do `PATH`, de variáveis
-    e do shell. Julgar caminho dentro de string de comando erraria nos dois
-    sentidos (o `..` de um `--exclude=../x` viraria recusa; um
-    `powershell -EncodedCommand` passaria batido), e uma guarda que erra nos dois
-    lados ensina o dono a desligá-la. Vale o mesmo pro `pattern` do `Glob`/`Grep`
-    (é padrão de busca, e o resultado já é filtrado pelo `path`) e pro que
-    acontece DEPOIS da decisão: a guarda julga o que a ferramenta DECLARA, não o
-    que o processo faz — um `Read` aprovado que siga um symlink criado entre a
-    decisão e a leitura é a mesma corrida do item 15, e quem consegue fazer isso
-    já roda código com a sua conta (item 1).
-18. **A guarda de escopo não cobre sessão de WSL.** Num workspace com ambiente
-    `wsl:<distro>` o agente roda DENTRO da distro e declara caminho POSIX
-    (`/mnt/d/repo/.worktrees/a/x.ts`), enquanto a raiz permitida gravada no
-    workspace é caminho do Windows. São dois espaços de nomes diferentes: no
-    `win32`, `resolve` gruda o `/mnt/d/…` na unidade do `cwd` e o `realpath`
-    sobe até a raiz dela, então comparar um contra o outro recusaria **toda**
-    ferramenta com caminho — inclusive a leitura do arquivo da própria tarefa.
-    Na 0.11.0 a guarda simplesmente **não se aplica** a esses workspaces: sem
-    `deny`, sem contador, sem selo 🛡, e o menu "⋯" não oferece "Permitir acesso
-    fora do worktree" (não há cerca pra liberar). É o mesmo estado da 0.10.x
-    para essas sessões. O conserto óbvio — traduzir a raiz pro espaço POSIX e
-    comparar lá — não entrou porque sem `realpath` **dentro** da distro ele
-    reabriria o desvio por symlink que a guarda existe pra fechar, e proteção
-    falsa é pior que limite declarado. O follow-up (raiz e `cwd` traduzidos no
-    lançamento, pelo `resolveEnvContext`) está registrado no backlog interno do dono.
+1. **Any process of yours controls Bridge.** `instance.json` is readable
+   by your account, and the token comes with it. It's the same model as
+   Claude Code, and it's the direct consequence of "same user = same
+   trust." There's no possible defense that isn't theater.
+2. **Filter driver in the GLOBAL or SYSTEM config.** Detection only
+   enumerates what belongs to the repository (`--local`, `--worktree`,
+   and the submodules). A driver in your `~/.gitconfig` doesn't show up —
+   and it shouldn't: that's you configuring your own machine, not a
+   repository bringing in an outside command.
+3. **`--ignore-submodules=all` hides submodule dirtiness.** It was the
+   price of stopping the superproject's `status` from descending into
+   the submodule (where there could be an invisible driver): **a
+   submodule with uncommitted changes stops counting in the sidebar's
+   `~M`**.
+4. **Reading an arbitrary `*.jsonl` via `transcript_path`.** (This is the
+   hook; the usage monitor's sweep is a different thing and is described
+   above.) The hook payload (A4) chooses which transcript to read; Bridge
+   requires an absolute path with a drive letter, `.jsonl` extension, a
+   file under 64 MB, and reads only the last 1 MB. It's still a file
+   chosen by whoever called the hook — and whoever calls the hook is the
+   agent **you** opened, under **your** account.
+5. **Token in the query string of `/ws` and the shim.** Switching to a
+   header would change the contract for UI, shell, CLI, and shim all at
+   once. The audit measured that the token doesn't leak: Fastify starts
+   with `logger: false`, no log call carries a URL or token, and the
+   channel is loopback with no proxy.
+6. **`LOOPBACK_ORIGIN` accepts any loopback port.** A page served by you
+   yourself at `http://127.0.0.1:<another port>` passes the origin check —
+   but it still needs the **token**, which it doesn't have. The regex is
+   anchored (`http://localhost.evil.com` is rejected).
+7. **Token in `localStorage` in web dev mode.** In Electron — which is
+   the product — the token comes through `preload` and never touches
+   `localStorage` or the URL. This only applies to someone running the UI
+   through Vite by hand.
+8. **Electron fuses not yet applied.** `RunAsNode`,
+   `EnableNodeCliInspectArguments`, `EnableEmbeddedAsarIntegrityValidation`,
+   and `OnlyLoadAppFromAsar` require the `@electron/fuses` package, which
+   isn't in the lockfile — and the security phase ran under the rule of
+   **not** installing a new dependency. It's logged in the owner's internal
+   backlog, pending authorization. Without the fuses, whoever can already
+   run a program under your account can use `Bridge.exe` as a generic
+   Node (`ELECTRON_RUN_AS_NODE`) — which, again, is item 1.
+9. **No generic route rate limit.** `POST /api/tasks` in a loop creates
+    worktrees until disk runs out. Whoever can call it already has the
+    token (A2). The only path **without** a token (OSC notification, A1)
+    has its own limit. The exception is `POST /api/usage/rescan`, which
+    got its own limit in 0.10.1 (**409** with a rescan already in flight,
+    **429** within 30 s of the last one): its cost is proportional to your
+    ENTIRE history, not to the request. Since 0.11.0 the scheduler queue
+    has its own cap: agent `POST /api/sessions` accumulates at most **64**
+    pending and responds **429 `queue-full`** past that — the queue is
+    in-memory, and letting it grow unbounded would trade the cost of
+    starting agents for the cost of holding onto them.
+10. **Git hooks run on the actions you request.** `worktree add` and
+    `merge` run the repository's hooks — that's git's contracted
+    behavior, and disabling them would break the flow for anyone with a
+    legitimate hook. The **passive** path (the poller, which runs on its
+    own every 15 s) is the one that was closed.
+11. **`bridge usage --json` shows your project paths.** It's JSON, it's
+    local, and it's you who runs the command. The HUMAN path of the same
+    command comes out sanitized and truncated; `--json` comes out raw
+    because it's the route body.
+12. **`usage.pricingFile` reads a file YOU pointed at.** Since 0.10.1 it
+    requires `.json`, a regular file, and at most 1 MiB, and any failure
+    becomes a generic warning — no content excerpt, no key name, and no
+    path, anywhere (response, screen, or log). What's left is what you
+    configured yourself.
+13. **Lower-than-real count on an out-of-spec transcript.** A line bigger
+    than 4 MiB is skipped on purpose (the alternative was locking up
+    reading that file forever). The panel, `bridge usage`, and
+    **Settings → Usage** say how many there were, and `core.log` says
+    which file — but consumption from those lines isn't recovered.
+14. **The `pricingFile` warning counts the invalid entries.** It says "N
+    entries ignored" and never their names, precisely so it doesn't
+    become an oracle for the keys in the pointed-at file — but the COUNT
+    is still a bit of information about a file you chose. It's the price
+    of warning you that your price table has an error.
+15. **The `pricingFile` cap is checked before reading (`stat` → `read`).**
+    Between the two calls the file could be swapped for another one;
+    whoever can do that already runs code under your account (item 1).
+    What the lock closes is the accidental path and the payload-chosen
+    target, not a race by someone already inside.
+16. **The 50,000-file cap cuts by walk order, not by date.** In a tree
+    above the cap, what's left out is the tail of the alphabetical sweep,
+    not the oldest. The panel warns that the list was cut; the way out is
+    pointing `BRIDGE_CLAUDE_HOME` at a smaller tree.
+17. **The scope guard doesn't cover `Bash`.** A shell command doesn't
+    declare a path — it declares text, and the target depends on `cwd`,
+    `PATH`, variables, and the shell. Judging a path inside a command
+    string would err both ways (the `..` of a `--exclude=../x` would
+    become a wrongful refusal; a `powershell -EncodedCommand` would slip
+    through), and a guard that errs both ways teaches the owner to turn
+    it off. The same goes for `Glob`/`Grep`'s `pattern` (it's a search
+    pattern, and the result is already filtered by `path`) and for what
+    happens AFTER the decision: the guard judges what the tool
+    DECLARES, not what the process does — an approved `Read` that
+    follows a symlink created between the decision and the read is the
+    same race as item 15, and whoever can do that already runs code
+    under your account (item 1).
+18. **The scope guard doesn't cover a WSL session.** In a workspace with
+    a `wsl:<distro>` environment the agent runs INSIDE the distro and
+    declares a POSIX path (`/mnt/d/repo/.worktrees/a/x.ts`), while the
+    allowed root stored on the workspace is a Windows path. These are two
+    different namespaces: on `win32`, `resolve` glues `/mnt/d/…` onto the
+    `cwd`'s drive and `realpath` climbs up to its root, so comparing one
+    against the other would reject **every** tool that has a path —
+    including reading the task's own file. In 0.11.0 the guard simply
+    **doesn't apply** to those workspaces: no `deny`, no counter, no 🛡
+    badge, and the "⋯" menu doesn't offer "Allow access outside the
+    worktree" (there's no fence to release). It's the same state as
+    0.10.x for those sessions. The obvious fix — translating the root
+    into POSIX space and comparing there — didn't go in because without
+    `realpath` **inside** the distro it would reopen the symlink escape
+    the guard exists to close, and a false sense of protection is worse
+    than a declared limit. The follow-up (root and `cwd` translated at
+    launch, via `resolveEnvContext`) is logged in the owner's internal
+    backlog.
 
-19. **O `claude` de um shell do Bridge é reapontável de dentro do próprio
-    shell.** O wrapper chama o alvo que está em `BRIDGE_CLAUDE_BIN`, e essa
-    variável (como o `PATH`) é do processo do shell — quem roda comando lá
-    dentro troca as duas. É o item 1 outra vez, do lado do terminal: quem digita
-    no seu shell já escolhe o que executar. O que o wrapper garante é que o
-    `claude` que a SESSÃO abriu nasceu com o `--settings` do Bridge.
-20. **A rota de hooks promove painel de shell (0.12.0).** Um POST autenticado em
-    `/hooks/<sid>/<Evento>` numa sessão de shell marca o painel como hospedeiro
-    e ocupa um slot do teto de agentes até o `SessionEnd` ou até o shell fechar.
-    Não há heartbeat: um Claude morto com `taskkill`, sem `SessionEnd`, deixa a
-    sessão marcada como hospedeira. É estado de tela e de contador, não de
-    permissão — nenhuma rota nova fica acessível por causa disso —, e quem
-    consegue chamar já tem o token (item 1). Está registrado no backlog interno do dono.
-21. **O token do Bridge está no ambiente de TODO PTY do Bridge.** `BRIDGE_TOKEN`,
-    `BRIDGE_PORT` e `BRIDGE_SHIM` entram no env de cada sessão (é assim que o
-    `bridge` da CLI e o shim de hook sabem com quem falar), então qualquer
-    processo aberto num terminal do Bridge — inclusive o `claude` hospedado e
-    tudo que ele executa — pode chamar a API inteira com a sua autorização. É o
-    item 1 dentro do terminal: precede a 0.12.0, a CLI depende disso, e tirar as
-    variáveis desligaria o `bridge` de dentro do painel sem fechar nada (quem
-    está no terminal lê o `instance.json` do mesmo jeito).
+19. **A Bridge shell's `claude` can be redirected from inside that same
+    shell.** The wrapper calls the target in `BRIDGE_CLAUDE_BIN`, and that
+    variable (like `PATH`) belongs to the shell process — whoever runs a
+    command in there can change both. It's item 1 again, on the terminal
+    side: whoever types in your shell already chooses what to run. What
+    the wrapper guarantees is that the `claude` the SESSION opened was
+    born with Bridge's `--settings`.
+20. **The hooks route promotes a shell panel (0.12.0).** An authenticated
+    POST to `/hooks/<sid>/<Event>` on a shell session marks the panel as
+    a host and occupies a slot in the agent cap until `SessionEnd` or
+    until the shell closes. There's no heartbeat: a Claude killed with
+    `taskkill`, without a `SessionEnd`, leaves the session marked as a
+    host. It's screen and counter state, not permission — no new route
+    becomes reachable because of it —, and whoever can call it already
+    has the token (item 1). It's logged in the owner's internal backlog.
+21. **The Bridge token is in the environment of EVERY Bridge PTY.**
+    `BRIDGE_TOKEN`, `BRIDGE_PORT`, and `BRIDGE_SHIM` go into every
+    session's env (that's how the CLI's `bridge` and the hook shim know
+    who to talk to), so any process opened in a Bridge terminal —
+    including the hosted `claude` and everything it runs — can call the
+    whole API with your authorization. It's item 1 inside the terminal:
+    it predates 0.12.0, the CLI depends on it, and stripping the
+    variables would disable `bridge` from inside the panel without
+    closing anything (whoever's at the terminal reads `instance.json`
+    just the same).
 
-## Verificações manuais que faltam
+## Manual checks still pending
 
-Estas não dá pra automatizar aqui, e estão registradas no backlog interno do dono:
+These can't be automated here, and are logged in the owner's internal
+backlog:
 
-- **Instalador em caminho com aspa simples.** Instalar em algo como
-  `C:\Programas\O'Brien\Bridge` e conferir que a instalação termina, que o PATH do
-  usuário recebeu `...\resources\cli` com o tipo intacto (`REG_EXPAND_SZ`) e
-  que a desinstalação desfaz só isso. O escape está testado como função pura; o
-  instalador rodando, não.
-- **Escape do toast nativo do Windows.** O toast é montado pelo Electron
-  (`new Notification`), que gera o XML do Windows internamente. Que ele escapa
-  o título e o corpo não foi verificado por experimento — só o truncamento
-  (200/1000 caracteres) e o teto de ~4 KB do scanner de OSC.
-- **CVEs do Electron 44.1.1** — não verificado online na sessão da auditoria.
+- **Installer at a path with a single quote.** Install into something
+  like `C:\Programs\O'Brien\Bridge` and check that the install finishes,
+  that the user's PATH received `...\resources\cli` with its type intact
+  (`REG_EXPAND_SZ`), and that uninstalling undoes only that. The escaping
+  is tested as a pure function; the installer actually running through
+  it isn't.
+- **Windows native toast escaping.** The toast is built by Electron
+  (`new Notification`), which generates the Windows XML internally. That
+  it escapes the title and body hasn't been verified by experiment —
+  only truncation (200/1000 characters) and the OSC scanner's ~4 KB cap.
+- **Electron 44.1.1 CVEs** — not checked online during the audit session.
 
-## Como reportar uma falha
+## How to report a flaw
 
-Se você achou algo, **não abra issue pública com o passo a passo**. Escreva
-para `<e-mail do autor>` ou abra uma **issue privada** (security advisory) no
-repositório. Inclua: versão do Bridge, o passo a passo mínimo pra reproduzir, o
-que você conseguiu fazer com isso, e qual dos atacantes acima descreve a sua
-posição (ou por que ele não está na lista).
+If you found something, **don't open a public issue with the
+step-by-step**. Write to `<author's email>` or open a **private issue**
+(security advisory) on the repository. Include: Bridge version, the
+minimal steps to reproduce, what you managed to do with it, and which of
+the attackers above describes your position (or why it isn't on the
+list).
 
-Não há programa de recompensa. O que existe é resposta: um projeto de uma pessoa
-só, num app local, respondendo o mais rápido que der.
+There's no bounty program. What there is is response: a one-person
+project, on a local app, answering as fast as it can.

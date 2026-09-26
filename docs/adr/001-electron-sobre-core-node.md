@@ -1,17 +1,17 @@
-# ADR-001 — App Electron sobre um core Node + UI web
+# ADR-001 — Electron app over a Node core + web UI
 
-**Status:** aceita (brainstorming de 03/09/2026, spec §2/§3)
+**Status:** accepted (brainstorming on 2026-09-03, spec §2/§3)
 
-## Contexto
+## Context
 
-O autor quer um equivalente Windows do cmux (macOS-only, Swift/AppKit sobre libghostty): sidebar com estado por agente, toast nativo, workspaces com painéis, worktrees, CLI `notify`. A pesquisa feita antes de começar não achou alternativa Windows que entregasse o pacote inteiro. A máquina de desenvolvimento não tem GPU. Um projeto anterior do autor já tinha o motor de PTY + hooks do Claude Code em Node — é dele que sai a base de `spawn.ts`/`hooks.ts` do core.
+The author wants a Windows equivalent of cmux (macOS-only, Swift/AppKit over libghostty): a sidebar with per-agent state, native toast, workspaces with panels, worktrees, a `notify` CLI. Research done before starting found no Windows alternative delivering the whole package. The development machine has no GPU. An earlier project of the author's already had the PTY engine + Claude Code hooks in Node — that's where the core's `spawn.ts`/`hooks.ts` foundation comes from.
 
-## Decisão
+## Decision
 
-Três processos: um **core** Node (Fastify + node-pty + SQLite, loopback + token) que possui sessões e estado; uma **UI** React + xterm.js que só desenha o que o core manda; um **shell** Electron que adiciona janela, toast e bandeja. Alternativas descartadas: só web local (perde toast confiável), Tauri (PTY em Rust ou sidecar, webview filho imaturo no Windows, zero reaproveitamento do motor Node que já existia).
+Three processes: a Node **core** (Fastify + node-pty + SQLite, loopback + token) that owns sessions and state; a React + xterm.js **UI** that only draws what the core sends; an Electron **shell** that adds window, toast, and tray. Alternatives discarded: local web only (loses reliable toast), Tauri (PTY in Rust or a sidecar, immature child webview on Windows, zero reuse of the existing Node engine).
 
-## Consequências
+## Consequences
 
-- O core roda sozinho numa aba de browser (Fase 1 inteira foi assim) — a UI e a CLI usam a mesma fronteira HTTP/WS.
-- Terminal renderiza com xterm.js no Chromium (renderer canvas, sem WebGL); sem GPU o Ghostty cairia em software também.
-- O peso do Electron é aceito; aceleração de hardware desligada.
+- The core runs standalone in a browser tab (all of Phase 1 was like this) — the UI and the CLI use the same HTTP/WS boundary.
+- The terminal renders with xterm.js in Chromium (canvas renderer, no WebGL); without a GPU, Ghostty would also fall back to software.
+- Electron's weight is accepted; hardware acceleration is off.

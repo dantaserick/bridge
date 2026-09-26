@@ -1,69 +1,77 @@
-# ADR-014 — O `claude` de um shell passa por um wrapper da sessão, e o primeiro hook promove o painel
+# ADR-014 — A shell's `claude` goes through a session wrapper, and the first hook promotes the panel
 
-**Status:** aceita (0.12.0 — spec §5, "Claude Code aberto DENTRO de um shell")
+**Status:** accepted (0.12.0 — spec §5, "Claude Code opened INSIDE a shell")
 
-## Contexto
+## Context
 
-Pela ADR-004, o estado que a sidebar mostra vem de hooks injetados por
-`--settings` **por sessão**: quem lança o Claude Code é o Bridge, então é o
-Bridge que escreve o `settings.json` daquela sessão e passa o argumento.
+Per ADR-004, the state the sidebar shows comes from hooks injected via
+`--settings` **per session**: whoever launches Claude Code is Bridge, so
+it's Bridge that writes that session's `settings.json` and passes the
+argument.
 
-Isso deixa de fora o caso mais comum de quem usa o app: a pessoa abre um painel
-de shell e digita `claude` ali dentro. Esse Claude Code sobe sem `--settings`,
-nenhum hook chega ao core, e a linha da sidebar continua dizendo `shell` com um
-agente inteiro trabalhando dentro dela — sem anel de estado, sem notificação de
-"esperando você", sem statusline, sem registro de uso e sem guarda de escopo.
-Foi o pedido literal do dono: "estou rodando claude code e aparece shell".
+That leaves out the most common case for someone using the app: opening a
+shell panel and typing `claude` in it. That Claude Code starts without
+`--settings`, no hook reaches the core, and the sidebar row keeps saying
+`shell` with a whole agent working inside it — no state ring, no "waiting
+for you" notification, no statusline, no usage logging, and no scope
+guard. It was the owner's literal request: "I'm running claude code and
+it shows shell."
 
-As saídas descartadas: **ler a tela do PTY** pra adivinhar que um Claude subiu
-(é exatamente o que a ADR-004 recusa — heurística sobre pixels em vez de fato
-declarado); e **escrever no `settings.json` global do usuário** (o Bridge
-passaria a mexer numa configuração que não é dele, e valeria pra todo Claude
-Code da máquina, inclusive os que rodam fora do app).
+The discarded options: **reading the PTY screen** to guess a Claude came
+up (that's exactly what ADR-004 rejects — heuristics over pixels instead
+of a declared fact); and **writing to the user's global `settings.json`**
+(Bridge would start touching a config that isn't its own, and it would
+apply to every Claude Code on the machine, including ones running outside
+the app).
 
-## Decisão
+## Decision
 
-**Duas metades, ambas dentro do que o Bridge já controla.**
+**Two halves, both within what Bridge already controls.**
 
-1. **O wrapper.** Toda sessão de shell nasce com `<sessionDir>/bin` na frente do
-   `PATH` **daquele PTY**, e dentro dela um `claude` que chama o Claude Code
-   REAL acrescentando `--settings <sessionDir>/settings.json` — o mesmo
-   `buildClaudeSettings(ctx)` das sessões de agente, com os mesmos hooks
-   apontando pro shim da ADR-004. O alvo é resolvido no processo do CORE, antes
-   do prepend, então o wrapper nunca aponta pra si mesmo; fora do WSL saem os
-   dois arquivos (`claude.cmd` pro cmd.exe/PowerShell e `claude` sem extensão
-   pro Git Bash), e dentro da distro sai um wrapper que remove o próprio bin do
-   `PATH` antes do `exec`. Sem `claude` na máquina, nada é escrito e o `PATH`
-   não é tocado.
-2. **A promoção.** Quando o primeiro hook de uma sessão de SHELL chega, ela vira
-   **hospedeira** (`Session.hosted = { agent, since }`) e dali em diante os
-   hooks passam pelo adaptador do Claude como numa sessão de agente. O
-   `SessionEnd` de saída desfaz a marca. `kind` **não** muda.
+1. **The wrapper.** Every shell session is born with `<sessionDir>/bin` at
+   the front of the `PATH` **of that PTY**, and inside it a `claude` that
+   calls the REAL Claude Code, adding `--settings <sessionDir>/settings.json`
+   — the same `buildClaudeSettings(ctx)` used by agent sessions, with the
+   same hooks pointing at ADR-004's shim. The target is resolved in the
+   CORE's process, before the prepend, so the wrapper never points at
+   itself; outside WSL there are two files (`claude.cmd` for
+   cmd.exe/PowerShell and `claude` with no extension for Git Bash), and
+   inside the distro there's a wrapper that removes its own bin from
+   `PATH` before the `exec`. Without `claude` on the machine, nothing is
+   written and `PATH` isn't touched.
+2. **The promotion.** When the first hook for a SHELL session arrives, it
+   becomes a **host** (`Session.hosted = { agent, since }`), and from then
+   on its hooks go through the Claude adapter just like an agent session.
+   The exit `SessionEnd` undoes the mark. `kind` does **not** change.
 
-## Consequências
+## Consequences
 
-- A ADR-004 continua valendo sem emenda: o estado ainda vem de hook declarado,
-  por `--settings` de sessão, pelo mesmo shim. O que mudou foi **quem põe o
-  argumento na linha de comando** — antes o Bridge lançando o processo, agora um
-  wrapper que o shell atravessa sozinho.
-- `kind` deixou de ser a resposta pra "esta sessão tem um agente?". A pergunta
-  passou a ser `hosted?.agent ?? agent`, em toda tela e em `liveAgentCount()`.
-  A ADR-005 (painel ↔ sessão 1:1) não muda: a hospedagem acontece DENTRO da
-  única sessão do painel.
-- A sessão hospedeira **conta** no teto de agentes (é um Claude de verdade
-  consumindo slot) e **nunca** passa pela fila do escalonador — não foi o Bridge
-  que a lançou, e enfileirar depois do fato não faria sentido.
-- Restaurar um painel hospedeiro reabre um **shell puro**: a sessão nasceu shell
-  e é shell na restauração. Retomar a conversa hospedada ainda não é suportado.
-  `POST /api/panes/:id/resume` a alcança pelo `lastAgentSessionId`, mas só num
-  painel que já teve uma sessão de agente antes — a rota também exige
-  `lastAgent`, e a hospedagem não grava esse.
-- A superfície da rota de hooks cresceu: um POST autenticado em
-  `/hooks/<sid de um shell>/<Evento>` promove aquele painel. É a mesma confiança
-  que a rota já exigia (o token do `instance.json`), com mais painéis do outro
-  lado — está escrito no `SECURITY.md`.
-- Dois limites declarados: no WSL, um login shell que **zera** o `PATH` (em vez
-  de acrescentar) desliga o recurso; e não há heartbeat — um Claude morto sem
-  `SessionEnd` deixa a sessão marcada como hospedeira até o shell fechar.
-- O interruptor `sessions.hostedAgents` (ligado por padrão) desliga tudo, e vale
-  a partir do **próximo** shell.
+- ADR-004 still holds unamended: state still comes from a declared hook,
+  via a session's `--settings`, through the same shim. What changed is
+  **who puts the argument on the command line** — before it was Bridge
+  launching the process, now it's a wrapper the shell goes through on its
+  own.
+- `kind` stopped being the answer to "does this session have an agent?".
+  The question became `hosted?.agent ?? agent`, on every screen and in
+  `liveAgentCount()`. ADR-005 (panel ↔ session 1:1) doesn't change: the
+  hosting happens INSIDE the panel's single session.
+- A host session **counts** toward the agent cap (it's a real Claude
+  consuming a slot) and **never** goes through the scheduler queue —
+  Bridge didn't launch it, and queueing it after the fact wouldn't make
+  sense.
+- Restoring a host panel reopens a **plain shell**: the session was born
+  a shell and stays a shell on restore. Resuming the hosted conversation
+  isn't supported yet. `POST /api/panes/:id/resume` reaches it via
+  `lastAgentSessionId`, but only in a panel that already had an agent
+  session before — the route also requires `lastAgent`, and hosting
+  doesn't write that.
+- The hooks route's surface grew: an authenticated POST to
+  `/hooks/<sid of a shell>/<Event>` promotes that panel. It's the same
+  trust the route already required (the `instance.json` token), with more
+  panels on the other side — it's written up in `SECURITY.md`.
+- Two declared limits: on WSL, a login shell that **clears** `PATH`
+  (instead of appending to it) turns the feature off; and there's no
+  heartbeat — a Claude killed without a `SessionEnd` leaves the session
+  marked as a host until the shell closes.
+- The `sessions.hostedAgents` switch (on by default) turns everything
+  off, and takes effect starting with the **next** shell.
